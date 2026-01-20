@@ -8,6 +8,12 @@ from app.agents.x_scraper import XScraperAgent
 from app.agents.skill_generator import SkillGenerator
 from app.agents.orchestrator import SkillOrchestrator
 from app.tools.supermemory_tool import SupermemoryToolkit
+from app.utils.state import (
+    load_network_state,
+    save_network_state,
+    get_pending_handles,
+    mark_handle_processed
+)
 
 # Load environment variables
 load_dotenv()
@@ -20,19 +26,28 @@ app = typer.Typer(
 @app.command()
 def build_network_skills(
     username: Optional[str] = typer.Argument(None, help="The X username to analyze"),
-    max_following: int = typer.Option(10, help="Maximum number of profiles to process"),
+    batch_size: float = typer.Option(0.2, "--batch-size", "-b", help="Fraction of pending profiles to process (0.0-1.0)"),
+    refresh: bool = typer.Option(False, "--refresh", "-r", help="Force refresh of following list"),
+    max_following: int = typer.Option(100, help="Maximum total profiles to track"),
     posts_per_user: int = typer.Option(5, help="Number of posts to analyze per user"),
-    include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts (default: verified only)"),
-    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts (default: humans only)"),
+    include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts"),
+    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts"),
     cloud_sync: bool = typer.Option(False, "--cloud-sync", help="Also sync skills to Supermemory cloud")
 ):
     """
     Scrapes the user's network, analyzes profiles, and generates AI skills.
+    Uses lazy loading to process profiles in batches across multiple runs.
     """
     if username is None:
         username = typer.prompt("👤 What is the X username to analyze?")
 
     print(f"🚀 Starting skill extraction for network of @{username}...")
+    
+    # Load existing state
+    state = load_network_state()
+    
+    # Check if we need to fetch (refresh or no cached list)
+    need_fetch = refresh or not state.get("following_handles")
     
     scraper = XScraperAgent()
     generator = SkillGenerator()
@@ -47,53 +62,73 @@ def build_network_skills(
             print(f"⚠️ Could not initialize Supermemory: {e}")
             print("   Continuing with local storage only...")
     
-    # 1. Get following list
-    verified_only = not include_unverified
-    humans_only = not include_orgs
-    
-    filter_parts = []
-    if verified_only:
-        filter_parts.append("verified")
-    if humans_only:
-        filter_parts.append("humans only")
-    filter_msg = f" ({', '.join(filter_parts)})" if filter_parts else ""
-    
-    print(f"🔍 Fetching following list for @{username}{filter_msg}...")
-    following_handles = scraper.get_following_profiles(username, verified_only=verified_only, humans_only=humans_only)
-    
-    if not following_handles:
-        print("⚠️ No following handles found. Trying a fallback or check if profile is private/accessible.")
-        # Optional: Add a manual list for testing if scraping fails
-        # following_handles = ["example_expert"]
-        return
-
-    print(f"✅ Found {len(following_handles)} profiles. Processing top {max_following}...")
-    
-    for i, handle in enumerate(following_handles[:max_following]):
-        print(f"\n[{i+1}/{max_following}] Processing @{handle}...")
+    # Fetch following list if needed
+    if need_fetch:
+        verified_only = not include_unverified
+        humans_only = not include_orgs
         
-        # 2. Get posts
+        filter_parts = []
+        if verified_only:
+            filter_parts.append("verified")
+        if humans_only:
+            filter_parts.append("humans only")
+        filter_msg = f" ({', '.join(filter_parts)})" if filter_parts else ""
+        
+        print(f"🔍 Fetching following list for @{username}{filter_msg}...")
+        following_handles = scraper.get_following_profiles(username, verified_only=verified_only, humans_only=humans_only)
+        
+        if not following_handles:
+            print("⚠️ No following handles found. Check if profile is private/accessible.")
+            return
+        
+        # Update state with new following list (trim to max_following)
+        state["following_handles"] = following_handles[:max_following]
+        if refresh:
+            # On refresh, keep processed handles but they'll be skipped
+            print(f"🔄 Refreshed following list. {len(state['following_handles'])} profiles tracked.")
+        else:
+            state["processed_handles"] = []
+            print(f"✅ Found {len(state['following_handles'])} profiles. Tracking for batch processing.")
+        save_network_state(state)
+    else:
+        print(f"📋 Using cached following list ({len(state['following_handles'])} profiles)")
+    
+    # Calculate batch
+    pending = get_pending_handles(state)
+    if not pending:
+        print("🎉 All profiles have been processed! Use --refresh to re-fetch.")
+        return
+    
+    batch_count = max(1, int(len(pending) * batch_size))
+    batch = pending[:batch_count]
+    
+    print(f"📦 Processing batch: {len(batch)} of {len(pending)} pending profiles ({batch_size*100:.0f}%)")
+    
+    for i, handle in enumerate(batch):
+        print(f"\n[{i+1}/{len(batch)}] Processing @{handle}...")
+        
+        # Get posts
         posts = scraper.get_posts_for_handle(handle, count=posts_per_user)
-        if not posts or len(posts) < 50: # Arbitrary small length check for empty/error
-            print(f"   ⚠️ Could not scrape sufficient posts for @{handle}. Skipping.")
+        if not posts or len(posts) < 50:
+            print(f"   ⚠️ Could not scrape sufficient posts for @{handle}. Marking as processed.")
+            state = mark_handle_processed(state, handle)
+            save_network_state(state)
             continue
             
-        # 3. Generate Skill Profile
+        # Generate Skill Profile
         print(f"   🧠 Analyzing expertise...")
         try:
             skill_profile = generator.generate_skill(
-                person_name=handle, # We might not have the display name, using handle
+                person_name=handle,
                 x_handle=handle,
                 posts=posts
             )
             
             if skill_profile and not isinstance(skill_profile, str):
-                # 4. Save locally and index in knowledge base
                 print(f"   💾 Saving skill and indexing for RAG...")
                 skill_path = generator.save_skill(skill_profile)
                 print(f"   ✅ Indexed and saved to: {skill_path}")
                 
-                # 5. Optional: Sync to Supermemory cloud
                 if supermemory:
                     try:
                         skill_json = skill_profile.model_dump_json()
@@ -103,12 +138,17 @@ def build_network_skills(
                         print(f"   ⚠️ Cloud sync failed: {e}")
             else:
                 error_msg = skill_profile if isinstance(skill_profile, str) else "Unknown error"
-                print(f"   ❌ Failed to generate valid skill profile. Response was: {error_msg}")
+                print(f"   ❌ Failed to generate valid skill profile: {error_msg}")
                 
         except Exception as e:
             print(f"   ❌ Error processing @{handle}: {e}")
+        
+        # Mark as processed regardless of success/failure
+        state = mark_handle_processed(state, handle)
+        save_network_state(state)
 
-    print("\n🎉 Network skill building complete!")
+    remaining = len(pending) - len(batch)
+    print(f"\n🎉 Batch complete! {remaining} profiles remaining. Run again to continue.")
 
 @app.command()
 def execute_task(task: str):
