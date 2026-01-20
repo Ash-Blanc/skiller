@@ -2,6 +2,7 @@ from typing import List, Optional
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
 from app.models.skill import SkillProfile
+from app.knowledge.skill_knowledge import get_shared_skill_knowledge
 import langwatch
 import os
 import re
@@ -18,6 +19,9 @@ class SkillGenerator:
             output_schema=SkillProfile,
             markdown=True
         )
+        
+        # Get shared knowledge base for indexing
+        self.knowledge = get_shared_skill_knowledge()
 
     def generate_skill(self, person_name: str, x_handle: str, posts: str) -> Optional[SkillProfile]:
         """
@@ -28,9 +32,17 @@ class SkillGenerator:
         )
         return response.content
 
-    def save_skill(self, profile: SkillProfile, skills_dir: str = "skills"):
+    def save_skill(self, profile: SkillProfile, skills_dir: str = "skills", index_in_kb: bool = True) -> str:
         """
         Saves a SkillProfile as an Agno Skill directory.
+        
+        Args:
+            profile: The SkillProfile to save
+            skills_dir: Directory to save skills
+            index_in_kb: Whether to index in the knowledge base for RAG
+            
+        Returns:
+            Path to the saved skill directory
         """
         # Create the skill name: lowercase, only letters, digits, and hyphens
         # Replace non-allowed characters with hyphens
@@ -75,4 +87,18 @@ metadata:
         with open(skill_md_path, "w") as f:
             f.write(content)
         
+        # Index in knowledge base for RAG retrieval
+        if index_in_kb:
+            self._index_skill(skill_md_path)
+        
         return skill_path
+    
+    def _index_skill(self, skill_md_path: str):
+        """
+        Index a skill file in the knowledge base for RAG retrieval.
+        """
+        try:
+            self.knowledge.add_content(path=skill_md_path)
+        except Exception as e:
+            print(f"   ⚠️ Warning: Could not index skill in knowledge base: {e}")
+

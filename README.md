@@ -11,8 +11,9 @@ You can then task this network to solve complex problems, and Skiller will orche
 
 - **🕸️ Network Scraping**: Automatically finds and analyzes profiles you follow on X.
 - **🧠 Skill Generation**: Extracts "Skill Profiles" (expertise, style, unique insights) from raw posts using advanced LLM analysis.
-- **💾 Dual Storage**: Saves skills locally (as Agno Skills) and in **Supermemory** (vector database) for semantic retrieval.
-- **🤖 Intelligent Orchestration**: Dynamically selects the best expert for any given task.
+- **🔍 RAG-Powered Search**: Uses local LanceDB with hybrid search (semantic + keyword) for intelligent skill retrieval.
+- **☁️ Optional Cloud Sync**: Optionally sync skills to Supermemory for cross-device access.
+- **🤖 Intelligent Orchestration**: Uses Think → Search → Analyze reasoning cycle to select the best expert.
 - **🔌 Extensible Architecture**: Built on **Agno**, allowing for easy addition of new tools and capabilities.
 
 ---
@@ -21,11 +22,11 @@ You can then task this network to solve complex problems, and Skiller will orche
 
 Before you begin, ensure you have the following API keys:
 
-- **Mistral API Key**: For the core LLM intelligence (using `mistral-large-latest`).
+- **Mistral API Key**: For the core LLM intelligence and embeddings.
 - **LangWatch API Key**: For prompt management and monitoring.
 - **Firecrawl API Key**: For scraping X profiles and posts.
-- **Supermemory API Key**: For storing and retrieving vector embeddings of skills.
-- **(Optional) X / Twitter API Keys**: For more robust data fetching (fallback).
+- **(Optional) Supermemory API Key**: For cloud sync of skills.
+- **(Optional) X / Twitter API Keys**: For more robust data fetching.
 
 ---
 

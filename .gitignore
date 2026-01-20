@@ -31,3 +31,6 @@ build/
 # Generated skills (user-specific)
 skills/*
 !skills/.gitkeep
+
+# LanceDB storage (local vector database)
+data/

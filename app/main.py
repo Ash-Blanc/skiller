@@ -23,10 +23,11 @@ def build_network_skills(
     max_following: int = typer.Option(10, help="Maximum number of profiles to process"),
     posts_per_user: int = typer.Option(5, help="Number of posts to analyze per user"),
     include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts (default: verified only)"),
-    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts (default: humans only)")
+    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts (default: humans only)"),
+    cloud_sync: bool = typer.Option(False, "--cloud-sync", help="Also sync skills to Supermemory cloud")
 ):
     """
-    Scrapes the user's network, analyzes profiles, and saves skills to Supermemory.
+    Scrapes the user's network, analyzes profiles, and generates AI skills.
     """
     if username is None:
         username = typer.prompt("👤 What is the X username to analyze?")
@@ -35,7 +36,16 @@ def build_network_skills(
     
     scraper = XScraperAgent()
     generator = SkillGenerator()
-    supermemory = SupermemoryToolkit()
+    
+    # Optional: Supermemory cloud sync
+    supermemory = None
+    if cloud_sync:
+        try:
+            supermemory = SupermemoryToolkit()
+            print("☁️ Cloud sync enabled (Supermemory)")
+        except Exception as e:
+            print(f"⚠️ Could not initialize Supermemory: {e}")
+            print("   Continuing with local storage only...")
     
     # 1. Get following list
     verified_only = not include_unverified
@@ -78,17 +88,19 @@ def build_network_skills(
             )
             
             if skill_profile:
-                # 4. Save to Supermemory
-                print(f"   💾 Saving skill to Supermemory...")
-                # Convert Pydantic model to JSON string
-                skill_json = skill_profile.model_dump_json()
-                supermemory_result = supermemory.add_skill_to_memory(skill_json)
-                
-                # 5. Save locally as Agno Skill
-                print(f"   📂 Saving skill locally as Agno Skill...")
+                # 4. Save locally and index in knowledge base
+                print(f"   💾 Saving skill and indexing for RAG...")
                 skill_path = generator.save_skill(skill_profile)
-                print(f"   ✅ Saved locally to: {skill_path}")
-                print(f"   ✅ {supermemory_result}")
+                print(f"   ✅ Indexed and saved to: {skill_path}")
+                
+                # 5. Optional: Sync to Supermemory cloud
+                if supermemory:
+                    try:
+                        skill_json = skill_profile.model_dump_json()
+                        result = supermemory.add_skill_to_memory(skill_json)
+                        print(f"   ☁️  {result}")
+                    except Exception as e:
+                        print(f"   ⚠️ Cloud sync failed: {e}")
             else:
                 print("   ❌ Failed to generate skill profile.")
                 
