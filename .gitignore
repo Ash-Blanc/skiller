@@ -27,3 +27,6 @@ build/
 
 # Better Agents
 .better-agents/
+
+# Generated skills (user-specific)
+skills/

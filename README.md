@@ -37,16 +37,21 @@ Before you begin, ensure you have the following API keys:
    cd skiller
    ```
 
-2. **Set up a virtual environment:**
+2. **Install the CLI tool using `uv`:**
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   uv tool install -e .
    ```
 
-3. **Install dependencies:**
+3. **Verify the installation:**
    ```bash
-   pip install -e .
+   skiller --help
    ```
+
+> [!TIP]
+> If you don't have `uv` installed, you can get it via:
+> ```bash
+> curl -LsSf https://astral.sh/uv/install.sh | sh
+> ```
 
 ---
 

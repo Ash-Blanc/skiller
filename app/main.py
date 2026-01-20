@@ -12,14 +12,18 @@ from app.tools.supermemory_tool import SupermemoryToolkit
 # Load environment variables
 load_dotenv()
 
-app = typer.Typer()
+app = typer.Typer(
+    help="Skiller - Turn your X network into a team of AI experts",
+    context_settings={"help_option_names": ["-h", "--help"]}
+)
 
 @app.command()
 def build_network_skills(
     username: Optional[str] = typer.Argument(None, help="The X username to analyze"),
     max_following: int = typer.Option(10, help="Maximum number of profiles to process"),
     posts_per_user: int = typer.Option(5, help="Number of posts to analyze per user"),
-    include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts (default: verified only)")
+    include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts (default: verified only)"),
+    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts (default: humans only)")
 ):
     """
     Scrapes the user's network, analyzes profiles, and saves skills to Supermemory.
@@ -35,9 +39,17 @@ def build_network_skills(
     
     # 1. Get following list
     verified_only = not include_unverified
-    filter_msg = "" if verified_only else " (including unverified)"
+    humans_only = not include_orgs
+    
+    filter_parts = []
+    if verified_only:
+        filter_parts.append("verified")
+    if humans_only:
+        filter_parts.append("humans only")
+    filter_msg = f" ({', '.join(filter_parts)})" if filter_parts else ""
+    
     print(f"🔍 Fetching following list for @{username}{filter_msg}...")
-    following_handles = scraper.get_following_profiles(username, verified_only=verified_only)
+    following_handles = scraper.get_following_profiles(username, verified_only=verified_only, humans_only=humans_only)
     
     if not following_handles:
         print("⚠️ No following handles found. Trying a fallback or check if profile is private/accessible.")
