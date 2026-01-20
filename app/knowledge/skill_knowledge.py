@@ -34,7 +34,7 @@ def get_skill_knowledge(
     vector_db = LanceDb(
         table_name=table_name,
         uri=db_path,
-        embedder=MistralEmbedder(),  # Uses MISTRAL_API_KEY from env
+        embedder=MistralEmbedder(api_key=os.getenv("MISTRAL_API_KEY")),
         search_type=search_type,
     )
     

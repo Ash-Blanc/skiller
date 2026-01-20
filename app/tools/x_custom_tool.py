@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 import tweepy
 from agno.tools import Toolkit
 
@@ -31,35 +31,46 @@ class CustomXToolkit(Toolkit):
         self.register(self.get_following_handles)
         self.register(self.get_recent_posts)
 
-    def get_following_handles(self, username: str, verified_only: bool = True) -> str:
+    def get_following_handles(self, username: str, verified_only: bool = True) -> List[Dict]:
         """
-        Gets the list of X handles that a given user follows.
+        Gets the list of X handles that a given user follows, including their profile details.
+        
         :param username: The X handle of the user (without @).
         :param verified_only: If True, only return verified (blue tick) accounts.
+        :return: List of dictionaries with 'username', 'name', and 'description' (bio).
         """
         try:
             user = self.client.get_user(username=username)
             if not user.data:
-                return f"User {username} not found."
+                return []
             
             user_id = user.data.id
-            # Request verified status via user_fields
+            # Request verified status and description (bio) via user_fields
             following = self.client.get_users_following(
                 id=user_id,
-                user_fields=['verified']
+                user_fields=['verified', 'description', 'name'],
+                max_results=100  # Fetch more results
             )
             
             if not following.data:
-                return f"User {username} is not following anyone or their following list is private."
+                return []
             
-            if verified_only:
-                handles = [u.username for u in following.data if getattr(u, 'verified', False)]
-            else:
-                handles = [u.username for u in following.data]
+            results = []
+            for u in following.data:
+                # Apply verified filter if requested
+                if verified_only and not getattr(u, 'verified', False):
+                    continue
+                    
+                results.append({
+                    "username": u.username,
+                    "name": u.name,
+                    "description": u.description
+                })
             
-            return ", ".join(handles)
+            return results
         except Exception as e:
-            return f"Error getting following for {username}: {str(e)}"
+            print(f"Error getting following for {username}: {str(e)}")
+            return []
 
     def get_recent_posts(self, username: str, count: int = 10) -> str:
         """

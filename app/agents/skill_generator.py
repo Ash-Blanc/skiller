@@ -45,9 +45,10 @@ class SkillGenerator:
             Path to the saved skill directory
         """
         # Create the skill name: lowercase, only letters, digits, and hyphens
-        # Replace non-allowed characters with hyphens
+        # Replace non-allowed characters with hyphens, then strip leading/trailing hyphens
         skill_name = profile.x_handle.replace("@", "").lower()
         skill_name = re.sub(r'[^a-z0-9-]', '-', skill_name)
+        skill_name = skill_name.strip('-')  # Agno validation requires no leading/trailing hyphens
         
         skill_path = os.path.join(skills_dir, skill_name)
         os.makedirs(skill_path, exist_ok=True)

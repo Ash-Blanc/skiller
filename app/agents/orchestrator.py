@@ -43,10 +43,10 @@ class SkillOrchestrator:
             self.knowledge = get_shared_skill_knowledge()
             self.knowledge_tools = KnowledgeTools(
                 knowledge=self.knowledge,
-                think=True,       # Enable planning/brainstorming
-                search=True,      # Enable knowledge search
-                analyze=True,     # Enable result analysis
-                add_few_shot=True,  # Add examples for better results
+                enable_think=True,       # Enable planning/brainstorming
+                enable_search=True,      # Enable knowledge search
+                enable_analyze=True,     # Enable result analysis
+                add_few_shot=True,       # Add examples for better results
             )
             tools.append(self.knowledge_tools)
         

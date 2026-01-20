@@ -87,7 +87,7 @@ def build_network_skills(
                 posts=posts
             )
             
-            if skill_profile:
+            if skill_profile and not isinstance(skill_profile, str):
                 # 4. Save locally and index in knowledge base
                 print(f"   💾 Saving skill and indexing for RAG...")
                 skill_path = generator.save_skill(skill_profile)
@@ -102,7 +102,8 @@ def build_network_skills(
                     except Exception as e:
                         print(f"   ⚠️ Cloud sync failed: {e}")
             else:
-                print("   ❌ Failed to generate skill profile.")
+                error_msg = skill_profile if isinstance(skill_profile, str) else "Unknown error"
+                print(f"   ❌ Failed to generate valid skill profile. Response was: {error_msg}")
                 
         except Exception as e:
             print(f"   ❌ Error processing @{handle}: {e}")
