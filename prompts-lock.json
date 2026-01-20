@@ -1,0 +1,20 @@
+{
+  "lockfileVersion": 1,
+  "prompts": {
+    "x_following_finder": {
+      "version": 1,
+      "versionId": "prompt_version_-BgY9m8DOarehPalBMZe1",
+      "materialized": "prompts/x_following_finder.prompt.yaml"
+    },
+    "x_post_analyzer": {
+      "version": 1,
+      "versionId": "prompt_version_Rjk5qGmooykK9JaVtOLJ1",
+      "materialized": "prompts/x_post_analyzer.prompt.yaml"
+    },
+    "skill_orchestrator": {
+      "version": 1,
+      "versionId": "prompt_version_JYDNgZFMs0CdVW2ttSLGB",
+      "materialized": "prompts/skill_orchestrator.prompt.yaml"
+    }
+  }
+}

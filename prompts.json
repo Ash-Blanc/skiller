@@ -1,0 +1,7 @@
+{
+  "prompts": {
+    "skill_orchestrator": "file:prompts/skill_orchestrator.prompt.yaml",
+    "x_following_finder": "file:prompts/x_following_finder.prompt.yaml",
+    "x_post_analyzer": "file:prompts/x_post_analyzer.prompt.yaml"
+  }
+}
