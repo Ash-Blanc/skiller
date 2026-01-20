@@ -111,6 +111,11 @@ graph TD
     Orchestrator -->|Execute| Profile
 ```
 
+### 📚 Documentation
+
+- [**Architecture Guide**](docs/ARCHITECTURE.md): Deep dive into the agents, pipeline, and storage layer.
+- [**Contributing Guide**](docs/CONTRIBUTING.md): How to set up development and submit PRs.
+
 ### 🛡️ License
 
 [MIT](LICENSE)
