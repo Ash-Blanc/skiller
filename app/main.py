@@ -126,5 +126,83 @@ def execute_task(task: str):
     print(result)
     print("="*50)
 
+
+@app.command()
+def sync(
+    rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Rebuild the knowledge base from scratch"),
+    list_skills: bool = typer.Option(False, "--list", "-l", help="List all indexed skills"),
+    cloud_sync: bool = typer.Option(False, "--cloud-sync", "-c", help="Sync all skills to Supermemory cloud"),
+    skills_dir: str = typer.Option("skills", help="Directory containing skill files")
+):
+    """
+    Sync and manage the skill knowledge base.
+    
+    Use this command to:
+    - Rebuild the knowledge base after making changes
+    - List all indexed skills
+    - Sync local skills to Supermemory cloud
+    """
+    import glob
+    from app.knowledge.skill_knowledge import get_skill_knowledge
+    
+    print("🔄 Skill Sync Manager")
+    print("-" * 40)
+    
+    # Find all SKILL.md files
+    skill_files = glob.glob(f"{skills_dir}/*/SKILL.md")
+    print(f"📁 Found {len(skill_files)} skill files in '{skills_dir}/'")
+    
+    if list_skills:
+        print("\n📋 Indexed Skills:")
+        for i, skill_file in enumerate(skill_files, 1):
+            skill_name = skill_file.split("/")[-2]
+            print(f"   {i}. {skill_name}")
+        return
+    
+    if rebuild:
+        print("\n🔨 Rebuilding knowledge base...")
+        
+        # Get fresh knowledge base
+        knowledge = get_skill_knowledge()
+        
+        indexed = 0
+        for skill_file in skill_files:
+            skill_name = skill_file.split("/")[-2]
+            try:
+                knowledge.add_content(path=skill_file)
+                print(f"   ✅ Indexed: {skill_name}")
+                indexed += 1
+            except Exception as e:
+                print(f"   ❌ Failed to index {skill_name}: {e}")
+        
+        print(f"\n✨ Rebuilt knowledge base with {indexed} skills")
+    
+    if cloud_sync:
+        print("\n☁️ Syncing to Supermemory cloud...")
+        try:
+            supermemory = SupermemoryToolkit()
+            synced = 0
+            for skill_file in skill_files:
+                skill_name = skill_file.split("/")[-2]
+                try:
+                    with open(skill_file, 'r') as f:
+                        content = f.read()
+                    result = supermemory.add_skill_to_memory(content)
+                    print(f"   ☁️ Synced: {skill_name}")
+                    synced += 1
+                except Exception as e:
+                    print(f"   ❌ Failed to sync {skill_name}: {e}")
+            print(f"\n✨ Synced {synced} skills to cloud")
+        except Exception as e:
+            print(f"❌ Could not initialize Supermemory: {e}")
+    
+    if not rebuild and not cloud_sync and not list_skills:
+        print("\nUsage examples:")
+        print("  skiller sync --list          # List all skills")
+        print("  skiller sync --rebuild       # Rebuild knowledge base")
+        print("  skiller sync --cloud-sync    # Sync to Supermemory")
+        print("  skiller sync -r -c           # Rebuild + cloud sync")
+
+
 if __name__ == "__main__":
     app()
