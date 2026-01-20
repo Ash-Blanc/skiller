@@ -29,4 +29,5 @@ build/
 .better-agents/
 
 # Generated skills (user-specific)
-skills/
+skills/*
+!skills/.gitkeep
