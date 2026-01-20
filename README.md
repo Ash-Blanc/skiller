@@ -7,7 +7,7 @@ You can then task this network to solve complex problems, and Skiller will orche
 
 ---
 
-## ✨ Features
+### ✨ Features
 
 - **🕸️ Network Scraping**: Automatically finds and analyzes profiles you follow on X.
 - **🧠 Skill Generation**: Extracts "Skill Profiles" (expertise, style, unique insights) from raw posts using advanced LLM analysis.
@@ -18,7 +18,7 @@ You can then task this network to solve complex problems, and Skiller will orche
 
 ---
 
-## 🛠️ Prerequisites
+### 🛠️ Prerequisites
 
 Before you begin, ensure you have the following API keys:
 
@@ -30,11 +30,37 @@ Before you begin, ensure you have the following API keys:
 
 ---
 
-   
+### 📦 Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/skiller.git
+   cd skiller
+   ```
+
+2. **Install the CLI tool using `uv`:**
+   ```bash
+   uv tool install -e .
+   ```
+
+3. **Verify the installation:**
+   ```bash
+   skiller --help
+   ```
+
+---
+
+### ⚙️ Configuration
+
+1. **Create your environment file:**
+   Copy the example file to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
 
 2. **Add your API Keys:**
    Open `.env` and fill in your keys:
-   
+   ```bash
    # LLM Provider
    MISTRAL_API_KEY=...
 
@@ -42,24 +68,49 @@ Before you begin, ensure you have the following API keys:
    LANGWATCH_API_KEY=...
 
    # Scraping & Memory
-   
+   FIRECRAWL_API_KEY=...
+   SUPERMEMORY_API_KEY=...
+   ```
+
 ---
 
-## 🖥️ Usage
+### 🖥️ Usage
 
-# Build skills from the people @user follows
-skiller build-network-skills --username "user_handle" --max-following 10 --posts-per-user 5
+**Build skills from your network:**
+```bash
+skiller build-network-skills --username "your_handle"
+```
+
+**Execute a task with your expert team:**
+```bash
 skiller execute-task "Analyze the latest trends in LLM reasoning based on my network's insights"
+```
 
+**Sync and manage skills:**
+```bash
+skiller sync --list
+skiller sync --rebuild
+```
+
+---
+
+### 🏗️ Architecture
+
+```mermaid
 graph TD
     User[User] -->|build-network-skills| Scraper[X Scraper Agent]
     Scraper -->|Get Posts| Firecrawl[Firecrawl / X API]
     Scraper -->|Raw Posts| Generator[Skill Generator Agent]
     Generator -->|Extract| Profile[Skill Profile]
     Profile -->|Save| Local[Local File System]
-    Profile -->|Index| Mem[Supermemory Vector DB]
+    Profile -->|Index| LanceDB[LanceDB Vector DB]
+    LanceDB <-->|Sync| Supermemory[Supermemory Cloud]
     
-    
-## 🛡️ License
+    User -->|execute-task| Orchestrator[Skill Orchestrator]
+    Orchestrator <-->|RAG Search| LanceDB
+    Orchestrator -->|Execute| Profile
+```
+
+### 🛡️ License
 
 [MIT](LICENSE)
