@@ -1,11 +1,21 @@
 from typing import List, Dict, Tuple
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
-from agno.tools.website import WebsiteTools
-from app.tools.x_custom_tool import CustomXToolkit
-from app.tools.x_scraping_tool import XScrapingToolkit
+# CustomXToolkit commented out due to X API rate limits and paywalls
+# from app.tools.x_custom_tool import CustomXToolkit
+from app.tools.scraper_tools import UnifiedScraperToolkit
 import langwatch
 import json
+import re
+
+# X handle validation pattern: 1-15 alphanumeric chars or underscores
+HANDLE_PATTERN = re.compile(r'^[a-zA-Z0-9_]{1,15}$')
+
+def is_valid_handle(handle: str) -> bool:
+    """Validate that a string is a valid X handle."""
+    if not handle:
+        return False
+    return bool(HANDLE_PATTERN.match(handle))
 
 # Heuristics for quick human detection without LLM call
 HUMAN_SIGNALS = [
@@ -29,15 +39,13 @@ class XScraperAgent:
         # Reload prompt for fallback LLM usage
         self.prompt_config = langwatch.prompts.get("x_following_finder")
         
-        # Initialize toolkits
-        self.firecrawl = XScrapingToolkit()      # Primary
-        self.x_api = CustomXToolkit()            # Fallback 1
-        self.web_tools = WebsiteTools()          # Fallback 2
+        # Initialize unified scraper toolkit (BrightData primary → Firecrawl → WebsiteTools)
+        self.scraper = UnifiedScraperToolkit()
         
         # Agent for fallback scraping method (LLM + Tools)
         self.scraper_agent = Agent(
             model=MistralChat(id=model_id),
-            tools=[self.firecrawl, self.web_tools], # Giving it both Firecrawl and Generic Web tools
+            tools=[self.scraper],
             instructions=self.prompt_config.prompt,
             markdown=True
         )
@@ -104,70 +112,57 @@ Respond with ONLY one word: HUMAN or ORG""",
     def get_following_profiles(self, username: str, verified_only: bool = True, humans_only: bool = True) -> List[str]:
         """
         Gets the list of handles the user follows using a cascading fallback strategy.
-        1. Firecrawl Scrape (Primary)
-        2. Official X API (Fallback 1)
-        3. LLM Agent + Web Tools (Fallback 2)
+        1. UnifiedScraperToolkit (BrightData → Firecrawl → WebsiteTools)
+        2. LLM Agent + Tools (Fallback)
         """
         profiles = []
         
-        # Method 1: Firecrawl (Primary)
-        print(f"   🔄 Attempting Method 1: Firecrawl Scrape...")
-        raw_html = self.firecrawl.get_following_raw(username)
+        # Method 1: Direct scrape via UnifiedScraperToolkit
+        print(f"   🔄 Attempting Method 1: Unified Scraper (BrightData → Firecrawl)...")
+        raw_content = self.scraper.scrape_x_following(username)
         
-        if "Error" not in raw_html and len(raw_html) > 500:
-            # We got raw HTML/content. Parsing this deterministically is hard without structure.
-            # Best approach here is to let the LLM agent parse it if it's raw text, 
-            # Or pass it to the agent as context?
-            # For simplicity in this "Primary" step, we might need a parser.
-            # But since Firecrawl returns markdown/text of the page, we can try to extract handles via Regex or simple split 
-            # if the format is clean. Often it's mixed. 
-            # So paradoxically, using the Agent (Method 3) is best for parsing Firecrawl output if direct API isn't used.
-            # However, let's treat "Method 1" here as: Try to get data via Firecrawl and if it looks good, use it.
-            # If Firecrawl returns "Sign in", we consider it a fail.
-            if "Sign in" in raw_html:
-                 print(f"   ⚠️ Method 1 failed (Login wall).")
-            else:
-                 # It's hard to extract structured data from raw crawl without LLM. 
-                 # Let's proceed to Fallback 1 (API) which is more structured, 
-                 # AND use Firecrawl data in Method 3 if API fails.
-                 print(f"   ⚠️ Method 1 got data but parsing requires LLM. Deferring to Fallback usage if API fails.")
+        if "Error" not in raw_content and "Login wall" not in raw_content and len(raw_content) > 500:
+            # We got content but parsing requires LLM
+            print(f"   ⚠️ Method 1 got data but parsing requires LLM. Proceeding to LLM fallback...")
         else:
-             print(f"   ⚠️ Method 1 failed ({raw_html[:50]}...)")
+            print(f"   ⚠️ Method 1 failed ({raw_content[:50]}...)")
 
-        # Method 2: Official X API (Fallback 1)
-        print(f"   🔄 Attempting Method 2: Official X API (Fallback 1)...")
-        api_profiles = self.x_api.get_following_handles(username, verified_only=verified_only)
+        # Method 2: Official X API - DISABLED due to rate limits and paywalls
+        # print(f"   🔄 Attempting Method 2: Official X API (Fallback 1)...")
+        # api_profiles = self.x_api.get_following_handles(username, verified_only=verified_only)
+        # 
+        # if api_profiles:
+        #      print(f"   ✅ Method 2 succeeded, found {len(api_profiles)} handles.")
+        #      profiles = api_profiles
+        # else:
+        #     print(f"   ⚠️ Method 2 failed or returned 0 results.")
+
+        # Method 2 (was 3): LLM Agent + Web Tools (Fallback)
+        print(f"   🔄 Attempting Method 2: LLM + Web/Firecrawl...")
         
-        if api_profiles:
-             print(f"   ✅ Method 2 succeeded, found {len(api_profiles)} handles.")
-             profiles = api_profiles
-        else:
-            print(f"   ⚠️ Method 2 failed or returned 0 results. Attempting Method 3: LLM + Web/Firecrawl...")
-            
-            # Method 3: LLM Agent + Web Tools (Fallback 2)
-            filters = []
-            if verified_only:
-                filters.append("verified blue checkmark")
-            if humans_only:
-                filters.append("individual people (not organizations/companies)")
-            
-            filter_str = " that are " + " and ".join(filters) if filters else ""
-            prompt = f"Find the handles followed by @{username}{filter_str}. Return ONLY a comma-separated list of handles, nothing else. Use the available tools to scrape the profile or search for this information."
-            
-            try:
-                response = self.scraper_agent.run(prompt)
-                content = response.content
-                if content:
-                    handles = [h.strip().replace('@', '') for h in content.split(',') if h.strip()]
-                    print(f"   ✅ Method 3 succeeded, found {len(handles)} handles.")
-                    
-                    # Construct dummy profile objects for the filter loop below
-                    # (LLM just gave strings, we lack bio/name for filtering unless we fetch,
-                    # but usually LLM has already done the filtering based on prompt)
-                    profiles = [{'username': h, 'name': '', 'description': ''} for h in handles]
-                    
-            except Exception as e:
-                print(f"   ❌ Method 3 failed: {e}")
+        filters = []
+        if verified_only:
+            filters.append("verified blue checkmark")
+        if humans_only:
+            filters.append("individual people (not organizations/companies)")
+        
+        filter_str = " that are " + " and ".join(filters) if filters else ""
+        prompt = f"Find the handles followed by @{username}{filter_str}. Return ONLY a comma-separated list of handles, nothing else. Use the available tools to scrape the profile or search for this information."
+        
+        try:
+            response = self.scraper_agent.run(prompt)
+            content = response.content
+            if content:
+                handles = [h.strip().replace('@', '') for h in content.split(',') if h.strip()]
+                print(f"   ✅ Method 2 succeeded, found {len(handles)} handles.")
+                
+                # Construct dummy profile objects for the filter loop below
+                # (LLM just gave strings, we lack bio/name for filtering unless we fetch,
+                # but usually LLM has already done the filtering based on prompt)
+                profiles = [{'username': h, 'name': '', 'description': ''} for h in handles]
+                
+        except Exception as e:
+            print(f"   ❌ Method 2 failed: {e}")
 
         if not profiles:
             return []
@@ -175,6 +170,12 @@ Respond with ONLY one word: HUMAN or ORG""",
         final_handles = []
         for p in profiles:
             handle = p.get('username')
+            
+            # Validate handle format first
+            if not is_valid_handle(handle):
+                print(f"   ⚠️ Skipping invalid handle: {handle[:30]}...")
+                continue
+            
             # If we got data from API, we have rich details to double-check.
             # If from LLM, we might have empty name/description.
             name = p.get('name', '')
@@ -193,34 +194,17 @@ Respond with ONLY one word: HUMAN or ORG""",
 
     def get_posts_for_handle(self, handle: str, count: int = 10) -> str:
         """
-        Gets recent posts for a specific handle using fallback strategy.
-        1. Firecrawl Scrape (Primary)
-        2. Official X API (Fallback 1)
-        3. Web Tools Scrape (Fallback 2)
+        Gets recent posts for a specific handle using UnifiedScraperToolkit.
+        Fallback chain: BrightData → Firecrawl → WebsiteTools
+        
+        Note: X API (Tweepy) disabled due to rate limits and paywalls.
         """
-        print(f"   🔄 Getting posts for @{handle}...")
+        print(f"   🔄 Getting posts for @{handle} (BrightData → Firecrawl → WebsiteTools)...")
         
-        # Method 1: Firecrawl (Primary)
-        try:
-             result = self.firecrawl.get_user_posts(handle, count)
-             if "Error" not in result and "Sign in" not in result:
-                 return result
-             print(f"   ⚠️ Method 1 failed ({result[:50]}...). Attempting Method 2: Official API...")
-        except Exception as e:
-             print(f"   ⚠️ Method 1 failed with error: {e}")
+        result = self.scraper.scrape_x_profile(handle)
         
-        # Method 2: Official X API (Fallback 1)
-        result = self.x_api.get_recent_posts(handle, count)
-        if "Error" not in result and "402 Payment Required" not in result:
-             return result
-             
-        print(f"   ⚠️ Method 2 failed ({result[:50]}...). Attempting Method 3: Web Tools fallback...")
+        if "Error" not in result and "Login wall" not in result:
+            return result
         
-        # Method 3: Web Tools (Fallback 2)
-        try:
-            url = f"https://x.com/{handle}"
-            # This is a generic scrape, less reliable for X but worth a try as last resort
-            web_result = self.web_tools.parse_url(url)
-            return str(web_result)
-        except Exception as e:
-            return f"Error scraping posts: {e}"
+        print(f"   ⚠️ Scraping failed: {result[:80]}...")
+        return result

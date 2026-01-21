@@ -26,6 +26,7 @@ app = typer.Typer(
 @app.command()
 def build_network_skills(
     username: Optional[str] = typer.Argument(None, help="The X username to analyze"),
+    handles: Optional[str] = typer.Option(None, "--handles", help="Comma-separated list of handles to process directly (bypasses scraping)"),
     batch_size: float = typer.Option(0.2, "--batch-size", "-b", help="Fraction of pending profiles to process (0.0-1.0)"),
     refresh: bool = typer.Option(False, "--refresh", "-r", help="Force refresh of following list"),
     max_following: int = typer.Option(100, help="Maximum total profiles to track"),
@@ -38,8 +39,20 @@ def build_network_skills(
     Scrapes the user's network, analyzes profiles, and generates AI skills.
     Uses lazy loading to process profiles in batches across multiple runs.
     """
-    if username is None:
-        username = typer.prompt("👤 What is the X username to analyze?")
+    # Handle manual handles input
+    if handles:
+        manual_handles = [h.strip().replace('@', '') for h in handles.split(',') if h.strip()]
+        print(f"📝 Using manually provided handles: {len(manual_handles)} profiles")
+        
+        # Update state with manual handles
+        state = load_network_state()
+        state["following_handles"] = manual_handles
+        state["processed_handles"] = []
+        save_network_state(state)
+        username = username or "manual"
+    else:
+        if username is None:
+            username = typer.prompt("👤 What is the X username to analyze?")
 
     print(f"🚀 Starting skill extraction for network of @{username}...")
     
@@ -47,7 +60,7 @@ def build_network_skills(
     state = load_network_state()
     
     # Check if we need to fetch (refresh or no cached list)
-    need_fetch = refresh or not state.get("following_handles")
+    need_fetch = (refresh or not state.get("following_handles")) and not handles
     
     scraper = XScraperAgent()
     generator = SkillGenerator()

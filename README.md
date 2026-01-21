@@ -24,9 +24,10 @@ Before you begin, ensure you have the following API keys:
 
 - **Mistral API Key**: For the core LLM intelligence and embeddings.
 - **LangWatch API Key**: For prompt management and monitoring.
-- **Firecrawl API Key**: For scraping X profiles and posts.
+- **Firecrawl API Key**: For scraping X profiles and posts (primary method).
 - **(Optional) Supermemory API Key**: For cloud sync of skills.
-- **(Optional) X / Twitter API Keys**: For more robust data fetching.
+
+> **Note**: X / Twitter API integration is currently **disabled** due to severe rate limits and paywalls. Firecrawl + LLM-based scraping is used instead.
 
 ---
 
