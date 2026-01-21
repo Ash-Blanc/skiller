@@ -53,3 +53,10 @@ def mark_handle_processed(state: Dict[str, Any], handle: str) -> Dict[str, Any]:
     if handle not in state.get("processed_handles", []):
         state.setdefault("processed_handles", []).append(handle)
     return state
+
+
+def clear_network_state() -> None:
+    """Clear the network state file completely."""
+    state_path = _get_state_path()
+    if os.path.exists(state_path):
+        os.remove(state_path)

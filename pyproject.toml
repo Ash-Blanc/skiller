@@ -25,6 +25,8 @@ dependencies = [
     "tweepy>=4.16.0",
     "typer>=0.21.1",
     "openai>=2.15.0",
+    "apify-client>=1.6.0",
+    "scrapegraph-py>=1.0.0",
 ]
 
 [build-system]

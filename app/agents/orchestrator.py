@@ -12,9 +12,10 @@ import os
 class SkillOrchestrator:
     def __init__(
         self, 
-        model_id: str = "mistral-large-latest", 
+        model_id: str = "mistral-medium-latest", 
         skills_dir: str = "skills",
-        use_rag: bool = True
+        use_rag: bool = True,
+        top_k_experts: int = 3
     ):
         """
         Initialize the Skill Orchestrator.
@@ -23,10 +24,12 @@ class SkillOrchestrator:
             model_id: The Mistral model to use
             skills_dir: Directory containing skill files
             use_rag: Whether to use RAG-based skill search (recommended)
+            top_k_experts: Number of top experts to consult for each task (default: 3)
         """
         self.model_id = model_id
         self.skills_dir = skills_dir
         self.use_rag = use_rag
+        self.top_k_experts = top_k_experts
         self.prompt_config = langwatch.prompts.get("skill_orchestrator")
         
         # Ensure skills directory exists
@@ -65,23 +68,22 @@ class SkillOrchestrator:
         
         rag_instructions = ""
         if self.use_rag:
-            rag_instructions = """
+            rag_instructions = f"""
 You have access to a knowledge base of expert skills via the Knowledge Tools.
-Use the Think → Search → Analyze cycle:
-1. THINK: Plan your approach and identify key search terms
-2. SEARCH: Query the knowledge base for relevant expert skills  
-3. ANALYZE: Evaluate if the results are sufficient or if you need more searches
+Use Think → Search → Analyze to find the top {self.top_k_experts} relevant experts.
 
-When you find the right expert, use their communication style and expertise to complete the task.
+OUTPUT FORMAT:
+1. Start with ONE brief line: "Based on insights from @expert1, @expert2, @expert3:"
+2. Then immediately focus on executing the task using their combined expertise
+3. Do NOT repeatedly credit experts throughout - just the one line at the start
 """
         
         return f"""
 {base_prompt}
 
 You have access to specialized expert skills loaded from {self.skills_dir}.
-Use 'get_skill_instructions(skill_name)' to explore available skills if needed.
 {rag_instructions}
-Your goal is to find the most relevant expert skill for a given task and execute it using their unique perspective and expertise.
+Focus on TASK EXECUTION. Find relevant experts, briefly credit them once, then deliver the result.
 """
 
     def run_task(self, task: str) -> str:

@@ -12,7 +12,8 @@ from app.utils.state import (
     load_network_state,
     save_network_state,
     get_pending_handles,
-    mark_handle_processed
+    mark_handle_processed,
+    clear_network_state
 )
 
 # Load environment variables
@@ -186,6 +187,7 @@ def sync(
     rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Rebuild the knowledge base from scratch"),
     list_skills: bool = typer.Option(False, "--list", "-l", help="List all indexed skills"),
     cloud_sync: bool = typer.Option(False, "--cloud-sync", "-c", help="Sync all skills to Supermemory cloud"),
+    from_file: Optional[str] = typer.Option(None, "--from-file", "-f", help="Path to file containing handles (one per line)"),
     skills_dir: str = typer.Option("skills", help="Directory containing skill files")
 ):
     """
@@ -195,12 +197,57 @@ def sync(
     - Rebuild the knowledge base after making changes
     - List all indexed skills
     - Sync local skills to Supermemory cloud
+    - Start fresh with --rebuild --from-file handles.txt
     """
     import glob
+    import shutil
     from app.knowledge.skill_knowledge import get_skill_knowledge
     
     print("🔄 Skill Sync Manager")
     print("-" * 40)
+    
+    # Handle full rebuild with file import
+    if rebuild and from_file:
+        print(f"\n🔥 Full rebuild requested with handles from: {from_file}")
+        
+        # 1. Clear existing skills directory
+        if os.path.exists(skills_dir):
+            skill_count = len(glob.glob(f"{skills_dir}/*/SKILL.md"))
+            print(f"   🗑️  Deleting {skill_count} existing skill files...")
+            shutil.rmtree(skills_dir)
+        os.makedirs(skills_dir, exist_ok=True)
+        
+        # 2. Clear network state
+        print("   🗑️  Clearing network state...")
+        clear_network_state()
+        
+        # 3. Clear LanceDB knowledge base
+        db_path = "data/skill_db"
+        if os.path.exists(db_path):
+            print("   🗑️  Clearing knowledge base...")
+            shutil.rmtree(db_path)
+        
+        # 4. Read handles from file
+        try:
+            with open(from_file, 'r') as f:
+                handles = [line.strip().replace('@', '') for line in f if line.strip() and not line.startswith('#')]
+            print(f"   📋 Loaded {len(handles)} handles from file")
+        except FileNotFoundError:
+            print(f"   ❌ File not found: {from_file}")
+            return
+        except Exception as e:
+            print(f"   ❌ Error reading file: {e}")
+            return
+        
+        # 5. Initialize state with handles
+        state = load_network_state()
+        state["following_handles"] = handles
+        state["processed_handles"] = []
+        save_network_state(state)
+        
+        print(f"\n✅ Rebuild complete! State initialized with {len(handles)} handles.")
+        print("   Run 'skiller build-network-skills' to generate skills.")
+        return
     
     # Find all SKILL.md files
     skill_files = glob.glob(f"{skills_dir}/*/SKILL.md")
@@ -252,10 +299,11 @@ def sync(
     
     if not rebuild and not cloud_sync and not list_skills:
         print("\nUsage examples:")
-        print("  skiller sync --list          # List all skills")
-        print("  skiller sync --rebuild       # Rebuild knowledge base")
-        print("  skiller sync --cloud-sync    # Sync to Supermemory")
-        print("  skiller sync -r -c           # Rebuild + cloud sync")
+        print("  skiller sync --list                          # List all skills")
+        print("  skiller sync --rebuild                       # Rebuild knowledge base")
+        print("  skiller sync --rebuild --from-file handles.txt  # Full rebuild from file")
+        print("  skiller sync --cloud-sync                    # Sync to Supermemory")
+        print("  skiller sync -r -c                           # Rebuild + cloud sync")
 
 
 if __name__ == "__main__":

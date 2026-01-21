@@ -35,7 +35,7 @@ Before you begin, ensure you have the following API keys:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/skiller.git
+   git clone https://github.com/Ash-Blanc/skiller.git
    cd skiller
    ```
 

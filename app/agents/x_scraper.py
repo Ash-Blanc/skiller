@@ -1,9 +1,8 @@
 from typing import List, Dict, Tuple
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
-# CustomXToolkit commented out due to X API rate limits and paywalls
-# from app.tools.x_custom_tool import CustomXToolkit
 from app.tools.scraper_tools import UnifiedScraperToolkit
+from app.tools.twitterapiio_tool import TwitterAPIIOToolkit, get_twitterapiio_toolkit
 import langwatch
 import json
 import re
@@ -39,7 +38,10 @@ class XScraperAgent:
         # Reload prompt for fallback LLM usage
         self.prompt_config = langwatch.prompts.get("x_following_finder")
         
-        # Initialize unified scraper toolkit (BrightData primary → Firecrawl → WebsiteTools)
+        # Initialize TwitterAPI.io toolkit (primary for X content)
+        self.twitterapiio = get_twitterapiio_toolkit()
+        
+        # Initialize unified scraper toolkit (fallback)
         self.scraper = UnifiedScraperToolkit()
         
         # Agent for fallback scraping method (LLM + Tools)
@@ -112,57 +114,50 @@ Respond with ONLY one word: HUMAN or ORG""",
     def get_following_profiles(self, username: str, verified_only: bool = True, humans_only: bool = True) -> List[str]:
         """
         Gets the list of handles the user follows using a cascading fallback strategy.
-        1. UnifiedScraperToolkit (BrightData → Firecrawl → WebsiteTools)
-        2. LLM Agent + Tools (Fallback)
+        
+        Fallback chain:
+        1. TwitterAPI.io (best - dedicated X API)
+        2. LLM Agent + Tools (last resort)
         """
         profiles = []
         
-        # Method 1: Direct scrape via UnifiedScraperToolkit
-        print(f"   🔄 Attempting Method 1: Unified Scraper (BrightData → Firecrawl)...")
-        raw_content = self.scraper.scrape_x_following(username)
+        # Method 1: TwitterAPI.io (primary - most reliable)
+        if self.twitterapiio and self.twitterapiio.is_available():
+            print(f"   🔄 Attempting Method 1: TwitterAPI.io...")
+            try:
+                followings = self.twitterapiio.get_user_followings(
+                    username, 
+                    max_users=200,
+                    verified_only=verified_only
+                )
+                if followings:
+                    print(f"   ✅ Method 1 succeeded, found {len(followings)} handles.")
+                    profiles = followings
+            except Exception as e:
+                print(f"   ⚠️ Method 1 failed: {e}")
         
-        if "Error" not in raw_content and "Login wall" not in raw_content and len(raw_content) > 500:
-            # We got content but parsing requires LLM
-            print(f"   ⚠️ Method 1 got data but parsing requires LLM. Proceeding to LLM fallback...")
-        else:
-            print(f"   ⚠️ Method 1 failed ({raw_content[:50]}...)")
-
-        # Method 2: Official X API - DISABLED due to rate limits and paywalls
-        # print(f"   🔄 Attempting Method 2: Official X API (Fallback 1)...")
-        # api_profiles = self.x_api.get_following_handles(username, verified_only=verified_only)
-        # 
-        # if api_profiles:
-        #      print(f"   ✅ Method 2 succeeded, found {len(api_profiles)} handles.")
-        #      profiles = api_profiles
-        # else:
-        #     print(f"   ⚠️ Method 2 failed or returned 0 results.")
-
-        # Method 2 (was 3): LLM Agent + Web Tools (Fallback)
-        print(f"   🔄 Attempting Method 2: LLM + Web/Firecrawl...")
-        
-        filters = []
-        if verified_only:
-            filters.append("verified blue checkmark")
-        if humans_only:
-            filters.append("individual people (not organizations/companies)")
-        
-        filter_str = " that are " + " and ".join(filters) if filters else ""
-        prompt = f"Find the handles followed by @{username}{filter_str}. Return ONLY a comma-separated list of handles, nothing else. Use the available tools to scrape the profile or search for this information."
-        
-        try:
-            response = self.scraper_agent.run(prompt)
-            content = response.content
-            if content:
-                handles = [h.strip().replace('@', '') for h in content.split(',') if h.strip()]
-                print(f"   ✅ Method 2 succeeded, found {len(handles)} handles.")
-                
-                # Construct dummy profile objects for the filter loop below
-                # (LLM just gave strings, we lack bio/name for filtering unless we fetch,
-                # but usually LLM has already done the filtering based on prompt)
-                profiles = [{'username': h, 'name': '', 'description': ''} for h in handles]
-                
-        except Exception as e:
-            print(f"   ❌ Method 2 failed: {e}")
+        # Method 2: LLM Agent + Web Tools (Fallback - may hallucinate)
+        if not profiles:
+            print(f"   🔄 Attempting Method 2: LLM + Web Tools (fallback)...")
+            
+            filters = []
+            if verified_only:
+                filters.append("verified blue checkmark")
+            if humans_only:
+                filters.append("individual people (not organizations/companies)")
+            
+            filter_str = " that are " + " and ".join(filters) if filters else ""
+            prompt = f"Find the handles followed by @{username}{filter_str}. Return ONLY a comma-separated list of handles, nothing else. Use the available tools to scrape the profile or search for this information."
+            
+            try:
+                response = self.scraper_agent.run(prompt)
+                content = response.content
+                if content:
+                    handles = [h.strip().replace('@', '') for h in content.split(',') if h.strip()]
+                    print(f"   ✅ Method 2 succeeded, found {len(handles)} handles.")
+                    profiles = [{'username': h, 'name': '', 'description': ''} for h in handles]
+            except Exception as e:
+                print(f"   ❌ Method 2 failed: {e}")
 
         if not profiles:
             return []
@@ -173,16 +168,13 @@ Respond with ONLY one word: HUMAN or ORG""",
             
             # Validate handle format first
             if not is_valid_handle(handle):
-                print(f"   ⚠️ Skipping invalid handle: {handle[:30]}...")
+                print(f"   ⚠️ Skipping invalid handle: {str(handle)[:30]}...")
                 continue
             
-            # If we got data from API, we have rich details to double-check.
-            # If from LLM, we might have empty name/description.
             name = p.get('name', '')
             bio = p.get('description', '')
             
-            # Apply human filter if we have bio data (API path)
-            # If LLM path, we trust the LLM's filtering from the prompt
+            # Apply human filter if we have bio data
             if humans_only and bio:
                 is_human = self.classify_profile(handle, name, bio)
                 if not is_human:
@@ -194,14 +186,26 @@ Respond with ONLY one word: HUMAN or ORG""",
 
     def get_posts_for_handle(self, handle: str, count: int = 10) -> str:
         """
-        Gets recent posts for a specific handle using UnifiedScraperToolkit.
-        Fallback chain: BrightData → Firecrawl → WebsiteTools
+        Gets recent posts for a specific handle.
         
-        Note: X API (Tweepy) disabled due to rate limits and paywalls.
+        Fallback chain: TwitterAPI.io → UnifiedScraperToolkit
         """
-        print(f"   🔄 Getting posts for @{handle} (BrightData → Firecrawl → WebsiteTools)...")
+        handle = handle.replace("@", "").strip()
         
-        result = self.scraper.scrape_x_profile(handle)
+        # Method 1: TwitterAPI.io (primary)
+        if self.twitterapiio and self.twitterapiio.is_available():
+            print(f"   🔄 Getting posts via TwitterAPI.io...")
+            try:
+                result = self.twitterapiio.get_user_tweets(handle, max_tweets=count)
+                if result and "Error" not in result and len(result) > 50:
+                    return result
+                print(f"   ⚠️ TwitterAPI.io insufficient, trying fallback...")
+            except Exception as e:
+                print(f"   ⚠️ TwitterAPI.io failed: {e}")
+        
+        # Method 2: UnifiedScraperToolkit
+        print(f"   🔄 Getting posts via UnifiedScraperToolkit...")
+        result = self.scraper.scrape_x_posts(handle, max_tweets=count)
         
         if "Error" not in result and "Login wall" not in result:
             return result

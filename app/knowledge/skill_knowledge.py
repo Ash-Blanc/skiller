@@ -3,6 +3,8 @@ Skill Knowledge Base using LanceDB for RAG-enhanced skill retrieval.
 """
 import os
 from typing import Optional
+from mistralai import Mistral
+from mistralai.utils.retries import RetryConfig, BackoffStrategy
 from agno.knowledge.knowledge import Knowledge
 from agno.knowledge.embedder.mistral import MistralEmbedder
 from agno.vectordb.lancedb import LanceDb
@@ -30,11 +32,26 @@ def get_skill_knowledge(
     # Ensure the data directory exists
     os.makedirs(db_path, exist_ok=True)
     
+    # Initialize Mistral client with retry configuration
+    mistral_client = Mistral(
+        api_key=os.getenv("MISTRAL_API_KEY"),
+        retry_config=RetryConfig(
+            strategy="backoff",
+            backoff=BackoffStrategy(
+                initial_interval=500,
+                max_interval=60000,
+                exponent=1.5,
+                max_elapsed_time=3600000,
+            ),
+            retry_connection_errors=True,
+        ),
+    )
+
     # Initialize LanceDB with Mistral embeddings
     vector_db = LanceDb(
         table_name=table_name,
         uri=db_path,
-        embedder=MistralEmbedder(api_key=os.getenv("MISTRAL_API_KEY")),
+        embedder=MistralEmbedder(mistral_client=mistral_client),
         search_type=search_type,
     )
     
