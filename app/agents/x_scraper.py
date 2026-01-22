@@ -2,7 +2,9 @@ from typing import List, Dict, Tuple
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
 from app.tools.scraper_tools import UnifiedScraperToolkit
+from app.tools.scraper_tools import UnifiedScraperToolkit
 from app.tools.twitterapiio_tool import TwitterAPIIOToolkit, get_twitterapiio_toolkit
+from app.tools.scrapebadger_tool import ScrapeBadgerToolkit, get_scrapebadger_toolkit
 import langwatch
 import json
 import re
@@ -38,7 +40,10 @@ class XScraperAgent:
         # Reload prompt for fallback LLM usage
         self.prompt_config = langwatch.prompts.get("x_following_finder")
         
-        # Initialize TwitterAPI.io toolkit (primary for X content)
+        # Initialize ScrapeBadger toolkit (Primary)
+        self.scrapebadger = get_scrapebadger_toolkit()
+        
+        # Initialize TwitterAPI.io toolkit (Secondary)
         self.twitterapiio = get_twitterapiio_toolkit()
         
         # Initialize unified scraper toolkit (fallback)
@@ -116,50 +121,52 @@ Respond with ONLY one word: HUMAN or ORG""",
         Gets the list of handles the user follows using a cascading fallback strategy.
         
         Fallback chain:
-        1. TwitterAPI.io (best - dedicated X API)
-        2. LLM Agent + Tools (last resort)
+        1. ScrapeBadger (Primary - most reliable)
+        2. TwitterAPI.io (Secondary)
+        
+        Note: No LLM fallback - that causes hallucination.
         """
         profiles = []
         
-        # Method 1: TwitterAPI.io (primary - most reliable)
-        if self.twitterapiio and self.twitterapiio.is_available():
-            print(f"   🔄 Attempting Method 1: TwitterAPI.io...")
+        # Method 1: ScrapeBadger (Primary - most reliable)
+        if self.scrapebadger and self.scrapebadger.is_available():
+            print(f"   🔄 Attempting Method 1: ScrapeBadger...")
             try:
-                followings = self.twitterapiio.get_user_followings(
-                    username, 
+                import json
+                followings_json = self.scrapebadger.get_user_followings(
+                    username,
                     max_users=200,
                     verified_only=verified_only
                 )
-                if followings:
-                    print(f"   ✅ Method 1 succeeded, found {len(followings)} handles.")
-                    profiles = followings
+                if followings_json and "Error" not in followings_json:
+                    followings = json.loads(followings_json)
+                    if followings:
+                        print(f"   ✅ Method 1 succeeded, found {len(followings)} handles.")
+                        profiles = followings
             except Exception as e:
                 print(f"   ⚠️ Method 1 failed: {e}")
         
-        # Method 2: LLM Agent + Web Tools (Fallback - may hallucinate)
+        # Method 2: TwitterAPI.io (Secondary)
         if not profiles:
-            print(f"   🔄 Attempting Method 2: LLM + Web Tools (fallback)...")
-            
-            filters = []
-            if verified_only:
-                filters.append("verified blue checkmark")
-            if humans_only:
-                filters.append("individual people (not organizations/companies)")
-            
-            filter_str = " that are " + " and ".join(filters) if filters else ""
-            prompt = f"Find the handles followed by @{username}{filter_str}. Return ONLY a comma-separated list of handles, nothing else. Use the available tools to scrape the profile or search for this information."
-            
-            try:
-                response = self.scraper_agent.run(prompt)
-                content = response.content
-                if content:
-                    handles = [h.strip().replace('@', '') for h in content.split(',') if h.strip()]
-                    print(f"   ✅ Method 2 succeeded, found {len(handles)} handles.")
-                    profiles = [{'username': h, 'name': '', 'description': ''} for h in handles]
-            except Exception as e:
-                print(f"   ❌ Method 2 failed: {e}")
+            if self.twitterapiio and self.twitterapiio.is_available():
+                print(f"   🔄 Attempting Method 2: TwitterAPI.io...")
+                try:
+                    followings = self.twitterapiio.get_user_followings(
+                        username, 
+                        max_users=200,
+                        verified_only=verified_only
+                    )
+                    if followings:
+                        print(f"   ✅ Method 2 succeeded, found {len(followings)} handles.")
+                        profiles = followings
+                except Exception as e:
+                    print(f"   ⚠️ Method 2 failed: {e}")
+        
+        # No LLM fallback - it causes hallucination!
+        # If both methods fail, return empty list
 
         if not profiles:
+            print(f"   ❌ All methods failed. No followings retrieved.")
             return []
             
         final_handles = []
@@ -192,7 +199,18 @@ Respond with ONLY one word: HUMAN or ORG""",
         """
         handle = handle.replace("@", "").strip()
         
-        # Method 1: TwitterAPI.io (primary)
+        # Method 1: ScrapeBadger (Primary)
+        if self.scrapebadger and self.scrapebadger.is_available():
+            print(f"   🔄 Getting posts via ScrapeBadger...")
+            try:
+                result = self.scrapebadger.get_user_tweets(handle, max_tweets=count)
+                if result and "Error" not in result:
+                    return result
+                print(f"   ⚠️ ScrapeBadger failed or returned empty, trying fallback...")
+            except Exception as e:
+                print(f"   ⚠️ ScrapeBadger error: {e}")
+
+        # Method 2: TwitterAPI.io (Secondary)
         if self.twitterapiio and self.twitterapiio.is_available():
             print(f"   🔄 Getting posts via TwitterAPI.io...")
             try:
@@ -203,7 +221,7 @@ Respond with ONLY one word: HUMAN or ORG""",
             except Exception as e:
                 print(f"   ⚠️ TwitterAPI.io failed: {e}")
         
-        # Method 2: UnifiedScraperToolkit
+        # Method 3: UnifiedScraperToolkit
         print(f"   🔄 Getting posts via UnifiedScraperToolkit...")
         result = self.scraper.scrape_x_posts(handle, max_tweets=count)
         

@@ -185,6 +185,7 @@ def execute_task(task: str):
 @app.command()
 def sync(
     rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Rebuild the knowledge base from scratch"),
+    username: Optional[str] = typer.Option(None, "--username", "-u", help="X username to fetch fresh followings from (uses ScrapeBadger)"),
     list_skills: bool = typer.Option(False, "--list", "-l", help="List all indexed skills"),
     cloud_sync: bool = typer.Option(False, "--cloud-sync", "-c", help="Sync all skills to Supermemory cloud"),
     from_file: Optional[str] = typer.Option(None, "--from-file", "-f", help="Path to file containing handles (one per line)"),
@@ -194,10 +195,11 @@ def sync(
     Sync and manage the skill knowledge base.
     
     Use this command to:
-    - Rebuild the knowledge base after making changes
-    - List all indexed skills
-    - Sync local skills to Supermemory cloud
-    - Start fresh with --rebuild --from-file handles.txt
+    - Rebuild completely from X: skiller sync -r -u <username>
+    - Rebuild from file: skiller sync -r -f handles.txt
+    - Re-index existing skills: skiller sync -r
+    - List all indexed skills: skiller sync -l
+    - Sync to cloud: skiller sync -c
     """
     import glob
     import shutil
@@ -205,6 +207,52 @@ def sync(
     
     print("🔄 Skill Sync Manager")
     print("-" * 40)
+    
+    # Handle full rebuild from X username (fetch fresh followings via ScrapeBadger)
+    if rebuild and username:
+        print(f"\n🔥 Full rebuild requested for @{username}")
+        print("   Fetching fresh followings from ScrapeBadger (no cache)...")
+        
+        # 1. Clear existing skills directory
+        if os.path.exists(skills_dir):
+            skill_count = len(glob.glob(f"{skills_dir}/*/SKILL.md"))
+            print(f"   🗑️  Deleting {skill_count} existing skill files...")
+            shutil.rmtree(skills_dir)
+        os.makedirs(skills_dir, exist_ok=True)
+        
+        # 2. Clear network state
+        print("   🗑️  Clearing network state...")
+        clear_network_state()
+        
+        # 3. Clear LanceDB knowledge base
+        db_path = "data/skill_db"
+        if os.path.exists(db_path):
+            print("   🗑️  Clearing knowledge base...")
+            shutil.rmtree(db_path)
+        
+        # 4. Fetch fresh followings from ScrapeBadger API (NO CACHE!)
+        print(f"\n🌐 Fetching followings for @{username} via ScrapeBadger API...")
+        scraper = XScraperAgent()
+        
+        # Use ScrapeBadger to get fresh followings
+        handles = scraper.get_following_profiles(username, verified_only=True, humans_only=True)
+        
+        if not handles:
+            print("   ❌ Failed to fetch followings. Check ScrapeBadger API key and username.")
+            return
+        
+        print(f"   ✅ Retrieved {len(handles)} handles from ScrapeBadger")
+        
+        # 5. Initialize state with fresh handles
+        state = load_network_state()
+        state["following_handles"] = handles
+        state["processed_handles"] = []
+        state["source"] = f"scrapebadger:{username}"
+        save_network_state(state)
+        
+        print(f"\n✅ Rebuild complete! State initialized with {len(handles)} fresh handles.")
+        print("   Run 'skiller build-network-skills' to generate skills.")
+        return
     
     # Handle full rebuild with file import
     if rebuild and from_file:
