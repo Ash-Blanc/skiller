@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
 from app.models.skill import SkillProfile
@@ -25,10 +25,74 @@ class SkillGenerator:
 
     def generate_skill(self, person_name: str, x_handle: str, posts: str) -> Optional[SkillProfile]:
         """
-        Generates a SkillProfile based on X posts.
+        Generates a SkillProfile based on X posts (legacy method).
         """
         response = self.agent.run(
             f"Please analyze the following posts from {person_name} (@{x_handle}) and extract their skill profile.\n\nPosts:\n{posts}",
+        )
+        return response.content
+
+    def generate_enriched_skill(
+        self, 
+        profile: Dict[str, Any], 
+        highlights: List[Dict[str, Any]], 
+        tweets: List[Dict[str, Any]]
+    ) -> Optional[SkillProfile]:
+        """
+        Generates a high-quality SkillProfile using enriched data.
+        
+        Args:
+            profile: User profile info (name, bio, verified, followers)
+            highlights: Highlighted/pinned tweets
+            tweets: Recent tweets
+            
+        Returns:
+            SkillProfile or None if generation fails
+        """
+        # Format profile info
+        profile_name = profile.get("name", profile.get("username", "Unknown"))
+        x_handle = profile.get("username", "")
+        profile_bio = profile.get("description", "No bio available")
+        verified = "✓ Verified" if profile.get("verified") else "Not verified"
+        followers = profile.get("followers_count", 0)
+        location = profile.get("location", "Not specified")
+        
+        # Format highlights
+        if highlights:
+            highlights_text = "\n".join([
+                f"📌 {h.get('text', '')}" + 
+                (f" [❤️ {h.get('like_count', 0)} likes, 🔄 {h.get('retweet_count', 0)} retweets]" if h.get('like_count') else "")
+                for h in highlights[:5]
+            ])
+        else:
+            highlights_text = "No highlighted posts available"
+        
+        # Format tweets
+        if tweets:
+            posts_text = "\n".join([
+                f"- {t.get('text', '')}" + 
+                (f" [❤️ {t.get('like_count', 0)} likes]" if t.get('like_count') else "")
+                for t in tweets[:30]
+            ])
+        else:
+            posts_text = "No recent posts available"
+        
+        # Build the prompt with all data
+        prompt = f"""## PROFILE INFO
+Name: {profile_name}
+Bio: {profile_bio}
+Verified: {verified}
+Followers: {followers:,}
+Location: {location}
+
+## HIGHLIGHTED/PINNED POSTS (Most Important - what they want to be known for)
+{highlights_text}
+
+## RECENT POSTS
+{posts_text}"""
+
+        response = self.agent.run(
+            f"Please analyze the following enriched profile data for {profile_name} (@{x_handle}) and extract their skill profile.\n\n{prompt}",
         )
         return response.content
 

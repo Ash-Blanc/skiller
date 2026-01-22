@@ -103,6 +103,96 @@ class ScrapeBadgerToolkit(Toolkit):
                 users.append(user)
         return users
 
+    async def _get_highlights_async(self, user_id: str, api_key: str) -> List[Any]:
+        """Async helper to get user highlights/pinned tweets."""
+        highlights = []
+        async with ScrapeBadger(api_key=api_key) as client:
+            async for tweet in client.twitter.users.get_highlights(user_id, max_items=10):
+                highlights.append(tweet)
+        return highlights
+
+    def get_user_highlights(self, user_id: str, max_items: int = 10) -> str:
+        """
+        Get highlighted/pinned tweets for a user via ScrapeBadger.
+        
+        Args:
+            user_id: Numeric Twitter user ID (not username)
+            max_items: Maximum number of highlights to retrieve
+            
+        Returns:
+            JSON string of highlighted tweets or error message
+        """
+        if not self.is_available():
+            return "Error: ScrapeBadger API key not configured"
+
+        api_key = self._get_next_key()
+        logger.info(f"Fetching highlights for user {user_id} via ScrapeBadger...")
+        
+        try:
+            highlights_data = asyncio.run(self._get_highlights_async(user_id, api_key))
+            
+            all_highlights = []
+            for tweet in highlights_data:
+                tweet_data = self._extract_tweet_data(tweet)
+                all_highlights.append(tweet_data)
+
+            logger.info(f"✅ Retrieved {len(all_highlights)} highlights for user {user_id}")
+            return json.dumps(all_highlights, indent=2)
+
+        except Exception as e:
+            logger.warning(f"ScrapeBadger highlights fetch failed: {e}")
+            return f"Error: {str(e)}"
+
+    def get_enriched_profile(self, username: str, max_tweets: int = 30) -> Dict[str, Any]:
+        """
+        Get enriched profile data including profile info, highlights, and recent tweets.
+        
+        This is designed for high-quality skill generation.
+        
+        Args:
+            username: X handle (without @)
+            max_tweets: Maximum tweets to fetch
+            
+        Returns:
+            Dict with 'profile', 'highlights', 'tweets' keys or None if failed
+        """
+        username = username.replace("@", "").strip()
+        logger.info(f"Fetching enriched profile for @{username}...")
+        
+        result = {
+            "profile": None,
+            "highlights": [],
+            "tweets": []
+        }
+        
+        # 1. Get profile info
+        profile_json = self.get_user_profile(username)
+        if profile_json and "Error" not in profile_json:
+            try:
+                result["profile"] = json.loads(profile_json)
+            except json.JSONDecodeError:
+                pass
+        
+        # 2. Get highlights (need user_id from profile)
+        if result["profile"] and result["profile"].get("user_id"):
+            user_id = result["profile"]["user_id"]
+            highlights_json = self.get_user_highlights(user_id)
+            if highlights_json and "Error" not in highlights_json:
+                try:
+                    result["highlights"] = json.loads(highlights_json)
+                except json.JSONDecodeError:
+                    pass
+        
+        # 3. Get recent tweets
+        tweets_json = self.get_user_tweets(username, max_tweets=max_tweets)
+        if tweets_json and "Error" not in tweets_json:
+            try:
+                result["tweets"] = json.loads(tweets_json)
+            except json.JSONDecodeError:
+                pass
+        
+        return result
+
     def _extract_tweet_data(self, tweet) -> Dict[str, Any]:
         """Extract tweet data handling different response structures."""
         # Try flattened structure first (from search_all)
@@ -230,6 +320,7 @@ class ScrapeBadgerToolkit(Toolkit):
             user = asyncio.run(self._get_profile_async(username, api_key))
             
             profile = {
+                "user_id": user.data.user_result.result.rest_id,
                 "username": user.data.user_result.result.legacy.screen_name,
                 "name": user.data.user_result.result.legacy.name,
                 "description": user.data.user_result.result.legacy.description,

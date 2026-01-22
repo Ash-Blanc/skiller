@@ -121,22 +121,41 @@ def build_network_skills(
     for i, handle in enumerate(batch):
         print(f"\n[{i+1}/{len(batch)}] Processing @{handle}...")
         
-        # Get posts
-        posts = scraper.get_posts_for_handle(handle, count=posts_per_user)
-        if not posts or len(posts) < 50:
-            print(f"   ⚠️ Could not scrape sufficient posts for @{handle}. Marking as processed.")
-            state = mark_handle_processed(state, handle)
-            save_network_state(state)
-            continue
-            
+        # Try to get enriched profile data (profile + highlights + tweets)
+        enriched_data = None
+        if scraper.scrapebadger and scraper.scrapebadger.is_available():
+            print(f"   📊 Fetching enriched profile data...")
+            try:
+                enriched_data = scraper.scrapebadger.get_enriched_profile(handle, max_tweets=posts_per_user)
+            except Exception as e:
+                print(f"   ⚠️ Enriched profile fetch failed: {e}")
+        
         # Generate Skill Profile
         print(f"   🧠 Analyzing expertise...")
         try:
-            skill_profile = generator.generate_skill(
-                person_name=handle,
-                x_handle=handle,
-                posts=posts
-            )
+            # Use enriched skill generation if we have enriched data
+            if enriched_data and enriched_data.get("profile") and (enriched_data.get("tweets") or enriched_data.get("highlights")):
+                print(f"   ✨ Using enriched data (profile + highlights + tweets)")
+                skill_profile = generator.generate_enriched_skill(
+                    profile=enriched_data["profile"],
+                    highlights=enriched_data.get("highlights", []),
+                    tweets=enriched_data.get("tweets", [])
+                )
+            else:
+                # Fallback to basic method
+                print(f"   📝 Using basic data (tweets only)")
+                posts = scraper.get_posts_for_handle(handle, count=posts_per_user)
+                if not posts or len(posts) < 50:
+                    print(f"   ⚠️ Could not scrape sufficient posts for @{handle}. Marking as processed.")
+                    state = mark_handle_processed(state, handle)
+                    save_network_state(state)
+                    continue
+                    
+                skill_profile = generator.generate_skill(
+                    person_name=handle,
+                    x_handle=handle,
+                    posts=posts
+                )
             
             if skill_profile and not isinstance(skill_profile, str):
                 print(f"   💾 Saving skill and indexing for RAG...")
