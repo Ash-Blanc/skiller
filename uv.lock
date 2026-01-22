@@ -2230,6 +2230,19 @@ wheels = [
 ]
 
 [[package]]
+name = "scrapebadger"
+version = "0.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/2b/a968a889b202fa4790f45e865032e795dae70e8276f210f60e57bd6aa633/scrapebadger-0.1.7.tar.gz", hash = "sha256:d53d07b1d91aef87abe4869b31f31a5cf2b9beea6e44a1f600fbddd78c68d6b1", size = 27050, upload-time = "2025-12-28T22:42:24.11Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/6a/e2627a388aee8c1225f2b07550b60200c9fa848978609e8256010eb03f42/scrapebadger-0.1.7-py3-none-any.whl", hash = "sha256:e4553dfdd6b2e2822fbb22383cf8a756de4e387fed94d0d2a2967d2ebc545baa", size = 36516, upload-time = "2025-12-28T22:42:22.857Z" },
+]
+
+[[package]]
 name = "scrapegraph-py"
 version = "1.44.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2295,6 +2308,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "requests" },
+    { name = "scrapebadger" },
     { name = "scrapegraph-py" },
     { name = "supermemory" },
     { name = "tantivy" },
@@ -2321,6 +2335,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.32.0" },
+    { name = "scrapebadger", specifier = ">=0.1.7" },
     { name = "scrapegraph-py", specifier = ">=1.0.0" },
     { name = "supermemory", specifier = ">=3.18.0" },
     { name = "tantivy", specifier = ">=0.25.1" },

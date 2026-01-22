@@ -12,7 +12,7 @@ import os
 class SkillOrchestrator:
     def __init__(
         self, 
-        model_id: str = "mistral-medium-latest", 
+        model_id: str = "mistral-large-latest", 
         skills_dir: str = "skills",
         use_rag: bool = True,
         top_k_experts: int = 3

@@ -27,6 +27,7 @@ dependencies = [
     "openai>=2.15.0",
     "apify-client>=1.6.0",
     "scrapegraph-py>=1.0.0",
+    "scrapebadger>=0.1.7",
 ]
 
 [build-system]
