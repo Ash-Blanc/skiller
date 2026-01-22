@@ -2,7 +2,7 @@
 
 > **Turn your X (Twitter) network into a powerful team of AI experts.**
 
-**Skiller** is an advanced AI agent that "clones" the expertise of the people you follow on X. It analyzes their posts to understand their unique insights, communication style, and core skills, effectively turning your social graph into a usable **Skill Network**.
+**Skiller** is an agent that "clones" the expertise of the people you follow on X. It analyzes their posts to understand their unique insights, communication style, and core skills, effectively turning your social graph into a usable **Skill Network**.
 
 You can then task this network to solve complex problems, and Skiller will orchestrate the perfect "expert" from your connections to get the job done.
 

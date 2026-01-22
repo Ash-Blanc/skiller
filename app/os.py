@@ -282,11 +282,25 @@ expert_agent.name = "skiller-expert"
 expert_agent.description = "An AI expert orchestrator that finds and executes tasks using your network's skills."
 expert_agent.storage = SqliteDb("data/agentos.db")
 
-# Create the AgentOS app with custom router
-app = AgentOS(
-    agents=[expert_agent],
+# Create a base FastAPI app with custom routes
+from fastapi import FastAPI
+
+base_app = FastAPI(
     title="Skiller API",
     version="0.1.0",
     description="Turn your X network into a team of AI experts.",
-    routers=[router],  # Add custom routes
 )
+base_app.include_router(router)
+
+# Create the AgentOS instance with the base app
+agentos = AgentOS(
+    agents=[expert_agent],
+    base_app=base_app,
+)
+
+# Export the FastAPI app for uvicorn
+app = agentos.get_app()
+
+
+if __name__ == "__main__":
+    agentos.serve(app="app.os:app", reload=True)
