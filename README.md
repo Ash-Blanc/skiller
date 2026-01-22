@@ -121,7 +121,14 @@ skiller build-network-skills
 Now leverage your network to solve problems. Skiller will find the right expert(s) for the job.
 
 ```bash
-skiller execute-task "Analyze the latest trends in LLM reasoning based on my network's insights"
+# Research and Analysis
+skiller execute-task "Analyze the latest trends in LLM reasoning based on my network's insights. Focus on Chain-of-Thought and Agentic patterns."
+
+# Technical Problem Solving
+skiller execute-task "Find an expert in my network who knows about Rust memory management and ask them how to handle cyclic references."
+
+# Creative / Strategy
+skiller execute-task "Based on the VCs and founders I follow, what are the emerging sectors for 2026?"
 ```
 
 #### 4. Manage Skills
