@@ -24,10 +24,12 @@ Before you begin, ensure you have the following API keys:
 
 - **Mistral API Key**: For the core LLM intelligence and embeddings.
 - **LangWatch API Key**: For prompt management and monitoring.
-- **Firecrawl API Key**: For scraping X profiles and posts (primary method).
+- **ScrapeBadger API Key**: For scraping X followings and posts (primary method).
+- **Firecrawl API Key**: For additional scraping support.
+- **(Optional) TwitterAPI.io API Key**: For follower/following data (secondary fallback).
 - **(Optional) Supermemory API Key**: For cloud sync of skills.
 
-> **Note**: X / Twitter API integration is currently **disabled** due to severe rate limits and paywalls. Firecrawl + LLM-based scraping is used instead.
+> **Note**: ScrapeBadger is the primary scraping method, with fallbacks to TwitterAPI.io and Firecrawl. No LLM-based hallucination!
 
 ---
 
@@ -68,8 +70,12 @@ Before you begin, ensure you have the following API keys:
    # Monitoring & Prompts
    LANGWATCH_API_KEY=...
 
-   # Scraping & Memory
+   # Scraping Tools (ScrapeBadger is primary)
+   SCRAPEBADGER_API_KEY=...
    FIRECRAWL_API_KEY=...
+   TWITTERAPIIO_API_KEY=...  # Optional fallback
+   
+   # Optional Cloud Memory
    SUPERMEMORY_API_KEY=...
    ```
 
@@ -77,9 +83,15 @@ Before you begin, ensure you have the following API keys:
 
 ### 🖥️ Usage
 
-**Build skills from your network:**
+**Full rebuild from X (fetch fresh followings via ScrapeBadger):**
 ```bash
-skiller build-network-skills --username "your_handle"
+skiller sync -r -u your_x_username
+skiller build-network-skills
+```
+
+**Build skills from your network (with manual handles):**
+```bash
+skiller build-network-skills --handles "user1,user2,user3"
 ```
 
 **Execute a task with your expert team:**
@@ -89,8 +101,11 @@ skiller execute-task "Analyze the latest trends in LLM reasoning based on my net
 
 **Sync and manage skills:**
 ```bash
-skiller sync --list
-skiller sync --rebuild
+skiller sync --list                          # List all skills
+skiller sync -r                              # Re-index existing skills
+skiller sync -r -u username                  # Full rebuild from X
+skiller sync -r -f handles.txt               # Full rebuild from file
+skiller sync -c                              # Sync to cloud
 ```
 
 ---
