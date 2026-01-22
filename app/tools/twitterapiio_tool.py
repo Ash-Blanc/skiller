@@ -9,9 +9,12 @@ user authentication. Provides reliable endpoints for:
 
 Pricing: ~$0.15/1k requests
 Docs: https://docs.twitterapi.io
+
+Supports multiple API keys for load balancing.
 """
 import os
 import json
+import random
 import requests
 from typing import List, Dict, Any, Optional
 from agno.tools import Toolkit
@@ -22,36 +25,73 @@ class TwitterAPIIOToolkit(Toolkit):
     """
     Toolkit for scraping X/Twitter using TwitterAPI.io service.
     
-    Requires TWITTER_API_IO_KEY environment variable.
+    Supports multiple API keys for load balancing.
+    Set TWITTER_API_IO_KEY for single key, or
+    TWITTER_API_IO_KEYS (comma-separated) for multiple keys.
     """
     
     BASE_URL = "https://api.twitterapi.io/twitter"
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, api_keys: Optional[List[str]] = None):
         super().__init__(name="twitterapiio")
         
-        self.api_key = api_key or os.getenv("TWITTER_API_IO_KEY")
+        # Support multiple API keys for load balancing
+        self.api_keys = []
         
-        if self.api_key:
-            logger.info("✅ TwitterAPI.io initialized")
+        if api_keys:
+            self.api_keys = api_keys
+        elif api_key:
+            self.api_keys = [api_key]
         else:
-            logger.info("No TWITTER_API_IO_KEY, TwitterAPI.io disabled")
+            # Check for comma-separated keys first
+            keys_str = os.getenv("TWITTER_API_IO_KEYS", "")
+            if keys_str:
+                self.api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+            else:
+                # Fall back to single key
+                single_key = os.getenv("TWITTER_API_IO_KEY")
+                if single_key:
+                    self.api_keys = [single_key]
+        
+        if self.api_keys:
+            logger.info(f"✅ TwitterAPI.io initialized with {len(self.api_keys)} API key(s)")
+        else:
+            logger.info("No TWITTER_API_IO_KEY(S), TwitterAPI.io disabled")
+        
+        self._key_index = 0  # For round-robin
         
         # Register tools
         self.register(self.get_user_info)
         self.register(self.get_user_tweets)
         self.register(self.get_user_followings)
     
+    def _get_next_key(self) -> str:
+        """Get next API key using round-robin."""
+        if not self.api_keys:
+            return None
+        key = self.api_keys[self._key_index % len(self.api_keys)]
+        self._key_index += 1
+        return key
+    
+    def _get_random_key(self) -> str:
+        """Get random API key for load balancing."""
+        if not self.api_keys:
+            return None
+        return random.choice(self.api_keys)
+    
     def is_available(self) -> bool:
         """Check if API key is configured."""
-        return self.api_key is not None
+        return len(self.api_keys) > 0
     
-    def _make_request(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_request(self, endpoint: str, params: Dict[str, Any], api_key: str = None) -> Dict[str, Any]:
         """Make authenticated request to TwitterAPI.io."""
-        if not self.api_key:
+        if api_key is None:
+            api_key = self._get_next_key()
+        
+        if not api_key:
             return {"status": "error", "message": "API key not configured"}
         
-        headers = {"x-api-key": self.api_key}
+        headers = {"x-api-key": api_key}
         url = f"{self.BASE_URL}/{endpoint}"
         
         try:

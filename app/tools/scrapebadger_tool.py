@@ -10,10 +10,13 @@ Provides endpoints for:
 
 Pricing: Per credit
 Docs: https://scrapebadger.com/sdks
+
+Supports multiple API keys for load balancing.
 """
 import os
 import asyncio
 import json
+import random
 from typing import List, Dict, Any, Optional
 from agno.tools import Toolkit
 from agno.utils.log import logger
@@ -23,48 +26,126 @@ class ScrapeBadgerToolkit(Toolkit):
     """
     Toolkit for scraping X/Twitter using ScrapeBadger service.
     
-    Requires SCRAPEBADGER_API_KEY environment variable.
+    Supports multiple API keys for load balancing.
+    Set SCRAPEBADGER_API_KEY for single key, or
+    SCRAPEBADGER_API_KEYS (comma-separated) for multiple keys.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, api_keys: Optional[List[str]] = None):
         super().__init__(name="scrapebadger")
         
-        self.api_key = api_key or os.getenv("SCRAPEBADGER_API_KEY")
+        # Support multiple API keys for load balancing
+        self.api_keys = []
         
-        if self.api_key:
-            logger.info("✅ ScrapeBadger initialized")
+        if api_keys:
+            self.api_keys = api_keys
+        elif api_key:
+            self.api_keys = [api_key]
         else:
-            logger.info("No SCRAPEBADGER_API_KEY, ScrapeBadger disabled")
+            # Check for comma-separated keys first
+            keys_str = os.getenv("SCRAPEBADGER_API_KEYS", "")
+            if keys_str:
+                self.api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+            else:
+                # Fall back to single key
+                single_key = os.getenv("SCRAPEBADGER_API_KEY")
+                if single_key:
+                    self.api_keys = [single_key]
+        
+        if self.api_keys:
+            logger.info(f"✅ ScrapeBadger initialized with {len(self.api_keys)} API key(s)")
+        else:
+            logger.info("No SCRAPEBADGER_API_KEY(S), ScrapeBadger disabled")
+        
+        self._key_index = 0  # For round-robin
         
         # Register tools
         self.register(self.get_user_profile)
         self.register(self.get_user_tweets)
         self.register(self.get_user_followings)
     
+    def _get_next_key(self) -> str:
+        """Get next API key using round-robin."""
+        if not self.api_keys:
+            return None
+        key = self.api_keys[self._key_index % len(self.api_keys)]
+        self._key_index += 1
+        return key
+    
+    def _get_random_key(self) -> str:
+        """Get random API key for load balancing."""
+        if not self.api_keys:
+            return None
+        return random.choice(self.api_keys)
+    
     def is_available(self) -> bool:
         """Check if API key is configured."""
-        return self.api_key is not None
+        return len(self.api_keys) > 0
 
-    async def _get_profile_async(self, username: str) -> Dict[str, Any]:
+    async def _get_profile_async(self, username: str, api_key: str) -> Dict[str, Any]:
         """Async helper to get profile."""
-        async with ScrapeBadger(api_key=self.api_key) as client:
+        async with ScrapeBadger(api_key=api_key) as client:
             return await client.twitter.users.get_by_username(username)
 
-    async def _get_tweets_async(self, query: str, limit: int) -> List[Any]:
+    async def _get_tweets_async(self, query: str, limit: int, api_key: str) -> List[Any]:
         """Async helper to get tweets."""
         tweets = []
-        async with ScrapeBadger(api_key=self.api_key) as client:
+        async with ScrapeBadger(api_key=api_key) as client:
             async for tweet in client.twitter.tweets.search_all(query, max_items=limit):
                 tweets.append(tweet)
         return tweets
 
-    async def _get_following_async(self, username: str, max_users: int) -> List[Any]:
+    async def _get_following_async(self, username: str, max_users: int, api_key: str) -> List[Any]:
         """Async helper to get users that username follows."""
         users = []
-        async with ScrapeBadger(api_key=self.api_key) as client:
+        async with ScrapeBadger(api_key=api_key) as client:
             async for user in client.twitter.users.get_following_all(username, max_items=max_users):
                 users.append(user)
         return users
+
+    def _extract_tweet_data(self, tweet) -> Dict[str, Any]:
+        """Extract tweet data handling different response structures."""
+        # Try flattened structure first (from search_all)
+        if hasattr(tweet, 'text') or hasattr(tweet, 'full_text'):
+            return {
+                "id": getattr(tweet, 'id_str', getattr(tweet, 'id', '')),
+                "text": getattr(tweet, 'full_text', getattr(tweet, 'text', '')),
+                "created_at": getattr(tweet, 'created_at', ''),
+                "retweet_count": getattr(tweet, 'retweet_count', 0),
+                "like_count": getattr(tweet, 'favorite_count', getattr(tweet, 'like_count', 0)),
+                "reply_count": getattr(tweet, 'reply_count', 0),
+                "view_count": getattr(tweet, 'view_count', 0),
+                "is_reply": getattr(tweet, 'in_reply_to_status_id_str', None) is not None,
+                "username": getattr(tweet, 'username', getattr(tweet, 'screen_name', '')),
+            }
+        # Try legacy nested structure
+        elif hasattr(tweet, 'legacy'):
+            legacy = tweet.legacy
+            return {
+                "id": getattr(legacy, 'id_str', ''),
+                "text": getattr(legacy, 'full_text', ''),
+                "created_at": getattr(legacy, 'created_at', ''),
+                "retweet_count": getattr(legacy, 'retweet_count', 0),
+                "like_count": getattr(legacy, 'favorite_count', 0),
+                "reply_count": getattr(legacy, 'reply_count', 0),
+                "view_count": 0,
+                "is_reply": getattr(legacy, 'in_reply_to_status_id_str', None) is not None,
+                "username": getattr(legacy, 'screen_name', ''),
+            }
+        # Fallback - try to get whatever we can
+        else:
+            logger.warning(f"Unknown tweet structure: {type(tweet)}")
+            return {
+                "id": str(getattr(tweet, 'id', '')),
+                "text": str(tweet),
+                "created_at": "",
+                "retweet_count": 0,
+                "like_count": 0,
+                "reply_count": 0,
+                "view_count": 0,
+                "is_reply": False,
+                "username": "",
+            }
 
     def get_user_followings(self, username: str, max_users: int = 200, verified_only: bool = False) -> str:
         """
@@ -82,11 +163,12 @@ class ScrapeBadgerToolkit(Toolkit):
             return "Error: ScrapeBadger API key not configured"
 
         username = username.replace("@", "").strip()
+        api_key = self._get_next_key()
         logger.info(f"Fetching followings for @{username} via ScrapeBadger...")
         
         try:
             # Run async code in sync context
-            users_data = asyncio.run(self._get_following_async(username, max_users))
+            users_data = asyncio.run(self._get_following_async(username, max_users, api_key))
             
             all_followings = []
             for user in users_data:
@@ -140,11 +222,12 @@ class ScrapeBadgerToolkit(Toolkit):
             return "Error: ScrapeBadger API key not configured"
 
         username = username.replace("@", "").strip()
+        api_key = self._get_next_key()
         logger.info(f"Fetching profile for @{username} via ScrapeBadger...")
         
         try:
             # Run async code in sync context
-            user = asyncio.run(self._get_profile_async(username))
+            user = asyncio.run(self._get_profile_async(username, api_key))
             
             profile = {
                 "username": user.data.user_result.result.legacy.screen_name,
@@ -178,27 +261,19 @@ class ScrapeBadgerToolkit(Toolkit):
             return "Error: ScrapeBadger API key not configured"
 
         username = username.replace("@", "").strip()
+        api_key = self._get_next_key()
         logger.info(f"Fetching tweets for @{username} via ScrapeBadger...")
         
         try:
             # Run async code in sync context
             # Using search 'from:user' is often more reliable/supported than user timeline in some scrapers
             query = f"from:{username}"
-            tweets_data = asyncio.run(self._get_tweets_async(query, max_tweets))
+            tweets_data = asyncio.run(self._get_tweets_async(query, max_tweets, api_key))
             
             all_tweets = []
             for tweet in tweets_data:
-                legacy = tweet.legacy
-                all_tweets.append({
-                    "id": legacy.id_str,
-                    "text": legacy.full_text,
-                    "created_at": legacy.created_at,
-                    "retweet_count": legacy.retweet_count,
-                    "like_count": legacy.favorite_count,
-                    "reply_count": legacy.reply_count,
-                    "view_count": 0, # Not always available in legacy object
-                    "is_reply": legacy.in_reply_to_status_id_str is not None,
-                })
+                tweet_data = self._extract_tweet_data(tweet)
+                all_tweets.append(tweet_data)
 
             logger.info(f"✅ Retrieved {len(all_tweets)} tweets for @{username}")
             return json.dumps(all_tweets, indent=2)
