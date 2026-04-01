@@ -6,7 +6,7 @@
 
 ### Key Technologies
 - **Backend:** Python (>= 3.13), [Agno](https://docs.agno.com/) (Agent Framework), FastAPI, [cli2](https://cli2.readthedocs.io/) (CLI).
-- **AI/LLM:** Mistral AI (Intelligence & Embeddings), [LangWatch](https://langwatch.ai/) (Prompt Management & Monitoring).
+- **AI/LLM:** Pollinations.ai (Default Provider), Mistral AI (Fallback), [LangWatch](https://langwatch.ai/) (Prompt Management & Monitoring).
 - **Storage:** [LanceDB](https://lancedb.com/) (Local Vector DB for RAG), SQLite (Session & State management via SQLAlchemy), Supermemory (Optional Cloud Sync).
 - **Scraping:** ScrapeBadger (Primary), TwitterAPI.io, Firecrawl, Apify.
 - **Frontend:** Next.js 15+, React 18, Tailwind CSS, Radix UI, Framer Motion, Zustand.
@@ -69,6 +69,7 @@ bun run dev # Starts on http://localhost:3000
     - Start with a single agent and scale to Teams/Workflows only when necessary.
 - **Prompt Management (LangWatch):**
     - **Never** hardcode prompts in application code.
+    - Use the centralized `get_llm_model` factory in `app/utils/llm.py`.
     - Use the LangWatch Prompt CLI: `langwatch prompt create <name>`.
     - Run `langwatch prompt sync` after modifying YAML files in `prompts/`.
 - **Testing:**

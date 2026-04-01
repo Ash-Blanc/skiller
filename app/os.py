@@ -46,7 +46,7 @@ class BuildNetworkRequest(BaseModel):
 class ExecuteTaskRequest(BaseModel):
     task: str
     skills_dir: str = "skills"
-    model_id: str = "mistral-large-latest"
+    model_id: Optional[str] = None
     top_k_experts: int = 3
     max_skill_agents_per_expert: int = 3
     use_rag: bool = False
@@ -138,7 +138,7 @@ async def execute_task(request: ExecuteTaskRequest):
 
 
 @router.get("/sessions/{session_id}/history", response_model=SessionHistoryResponse)
-async def get_session_history(session_id: str, skills_dir: str = "skills", model_id: str = "mistral-large-latest", top_k_experts: int = 3, max_skill_agents_per_expert: int = 3, use_rag: bool = False, session_db_path: str = "data/skiller_sessions.db"):
+async def get_session_history(session_id: str, skills_dir: str = "skills", model_id: Optional[str] = None, top_k_experts: int = 3, max_skill_agents_per_expert: int = 3, use_rag: bool = False, session_db_path: str = "data/skiller_sessions.db"):
     """Return the stored history for a team session."""
     request = ExecuteTaskRequest(
         task="",

@@ -132,10 +132,10 @@ Create evaluations in Jupyter notebooks under `tests/evaluations/`:
 **Basic Agent:**
 ```python
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from app.utils.llm import get_llm_model
 
 agent = Agent(
-    model=OpenAIChat(id="gpt-4o"),
+    model=get_llm_model(),
     instructions="You are a helpful assistant",
     markdown=True,
 )
@@ -147,7 +147,7 @@ agent.print_response("Your query", stream=True)
 from agno.tools.duckduckgo import DuckDuckGoTools
 
 agent = Agent(
-    model=OpenAIChat(id="gpt-4o"),
+    model=get_llm_model(),
     tools=[DuckDuckGoTools()],
     instructions="Search the web for information",
 )
@@ -179,7 +179,7 @@ class Result(BaseModel):
     findings: list[str]
 
 agent = Agent(
-    model=OpenAIChat(id="gpt-4o"),
+    model=get_llm_model(),
     output_schema=Result,
 )
 result: Result = agent.run(query).content
