@@ -2,12 +2,11 @@ from typing import List, Dict, Tuple
 from agno.agent import Agent
 from agno.models.mistral import MistralChat
 from app.tools.scraper_tools import UnifiedScraperToolkit
-from app.tools.scraper_tools import UnifiedScraperToolkit
 from app.tools.twitterapiio_tool import TwitterAPIIOToolkit, get_twitterapiio_toolkit
 from app.tools.scrapebadger_tool import ScrapeBadgerToolkit, get_scrapebadger_toolkit
-import langwatch
 import json
 import re
+from app.utils.prompts import get_prompt_text
 
 # X handle validation pattern: 1-15 alphanumeric chars or underscores
 HANDLE_PATTERN = re.compile(r'^[a-zA-Z0-9_]{1,15}$')
@@ -37,8 +36,7 @@ ORG_SIGNALS = [
 class XScraperAgent:
     def __init__(self, model_id: str = "mistral-large-latest"):
         self.model_id = model_id
-        # Reload prompt for fallback LLM usage
-        self.prompt_config = langwatch.prompts.get("x_following_finder")
+        self.prompt_text = get_prompt_text("x_following_finder")
         
         # Initialize ScrapeBadger toolkit (Primary)
         self.scrapebadger = get_scrapebadger_toolkit()
@@ -53,7 +51,7 @@ class XScraperAgent:
         self.scraper_agent = Agent(
             model=MistralChat(id=model_id),
             tools=[self.scraper],
-            instructions=self.prompt_config.prompt,
+            instructions=self.prompt_text,
             markdown=True
         )
         

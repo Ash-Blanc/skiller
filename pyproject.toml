@@ -23,7 +23,6 @@ dependencies = [
     "supermemory>=3.18.0",
     "tantivy>=0.25.1",
     "tweepy>=4.16.0",
-    "typer>=0.21.1",
     "openai>=2.15.0",
     "apify-client>=1.6.0",
     "scrapegraph-py>=1.0.0",
@@ -32,6 +31,9 @@ dependencies = [
     "fastapi>=0.128.0",
     "sqlalchemy>=2.0.46",
     "pyjwt>=2.10.1",
+    "structlog>=25.5.0",
+    "psutil>=7.2.1",
+    "cli2>=5.2.3",
 ]
 
 [build-system]
@@ -44,5 +46,10 @@ include = ["app*"]
 [tool.setuptools.package-data]
 app = ["prompts/*.yaml", "prompts/.materialized/*"]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
 [project.scripts]
-skiller = "app.main:app"
+skiller = "app.main:main"

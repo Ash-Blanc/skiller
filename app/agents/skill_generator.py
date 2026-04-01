@@ -3,19 +3,19 @@ from agno.agent import Agent
 from agno.models.mistral import MistralChat
 from app.models.skill import SkillProfile
 from app.knowledge.skill_knowledge import get_shared_skill_knowledge
-import langwatch
+from app.utils.skill_index import upsert_skill_index_entry
 import os
 import re
+from app.utils.prompts import get_prompt_text
 
 class SkillGenerator:
     def __init__(self, model_id: str = "mistral-large-latest"):
         self.model_id = model_id
-        # Fetch the prompt from LangWatch
-        self.prompt_config = langwatch.prompts.get("x_post_analyzer")
+        self.prompt_text = get_prompt_text("x_post_analyzer")
         
         self.agent = Agent(
             model=MistralChat(id=self.model_id),
-            instructions=self.prompt_config.prompt,
+            instructions=self.prompt_text,
             output_schema=SkillProfile,
             markdown=True
         )
@@ -151,6 +151,8 @@ metadata:
 """
         with open(skill_md_path, "w") as f:
             f.write(content)
+
+        upsert_skill_index_entry(skills_dir, profile, skill_md_path)
         
         # Index in knowledge base for RAG retrieval
         if index_in_kb:
@@ -166,4 +168,3 @@ metadata:
             self.knowledge.add_content(path=skill_md_path)
         except Exception as e:
             print(f"   ⚠️ Warning: Could not index skill in knowledge base: {e}")
-

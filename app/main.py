@@ -1,13 +1,19 @@
+"""
+Skiller CLI entrypoint.
+"""
+
 import os
-import typer
-import asyncio
+import sys
 from typing import Optional
+
+import cli2
 from dotenv import load_dotenv
 
 from app.agents.x_scraper import XScraperAgent
 from app.agents.skill_generator import SkillGenerator
 from app.agents.orchestrator import SkillOrchestrator
 from app.tools.supermemory_tool import SupermemoryToolkit
+from app.models.session import SessionExecutionResult
 from app.utils.state import (
     load_network_state,
     save_network_state,
@@ -16,25 +22,100 @@ from app.utils.state import (
     clear_network_state
 )
 
-# Load environment variables
 load_dotenv()
 
-app = typer.Typer(
-    help="Skiller - Turn your X network into a team of AI experts",
-    context_settings={"help_option_names": ["-h", "--help"]}
+cli = cli2.Group(
+    name="skiller",
+    doc="Skiller - Turn your X network into a team of AI experts",
+    posix=True,
 )
 
-@app.command()
+
+def main() -> None:
+    """CLI entrypoint with `--help` compatibility for cli2."""
+    original_argv = sys.argv[:]
+    try:
+        args = sys.argv[1:]
+        if args and any(arg in {"-h", "--help"} for arg in args):
+            command_args = [arg for arg in args if arg not in {"-h", "--help"}]
+            if command_args:
+                sys.argv = [sys.argv[0], "help", *command_args]
+            else:
+                sys.argv = [sys.argv[0], "help"]
+        cli.entry_point()
+    finally:
+        sys.argv = original_argv
+
+
+def _build_orchestrator(
+    *,
+    skills_dir: str,
+    model_id: str,
+    top_k_experts: int,
+    max_skill_agents_per_expert: int,
+    use_rag: bool,
+    session_db_path: str,
+) -> SkillOrchestrator:
+    return SkillOrchestrator(
+        model_id=model_id,
+        skills_dir=skills_dir,
+        use_rag=use_rag,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        session_db_path=session_db_path,
+    )
+
+
+def _run_task_session(
+    *,
+    task: str,
+    skills_dir: str,
+    model_id: str,
+    top_k_experts: int,
+    max_skill_agents_per_expert: int,
+    use_rag: bool,
+    session_id: Optional[str],
+    new_conversation: bool,
+    session_db_path: str,
+) -> SessionExecutionResult | str:
+    orchestrator = _build_orchestrator(
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_db_path=session_db_path,
+    )
+    if hasattr(orchestrator, "run_session_task"):
+        return orchestrator.run_session_task(
+            task,
+            session_id=session_id,
+            new_conversation=new_conversation,
+        )
+    return orchestrator.run_task(task)
+
+
+def _print_task_result(result: SessionExecutionResult | str) -> None:
+    print("\n" + "=" * 50)
+    print("RESULT")
+    print("=" * 50)
+    if isinstance(result, SessionExecutionResult):
+        print(result.answer)
+    else:
+        print(result)
+    print("=" * 50)
+
+@cli.cmd(name="build-network-skills")
 def build_network_skills(
-    username: Optional[str] = typer.Argument(None, help="The X username to analyze"),
-    handles: Optional[str] = typer.Option(None, "--handles", help="Comma-separated list of handles to process directly (bypasses scraping)"),
-    batch_size: float = typer.Option(0.2, "--batch-size", "-b", help="Fraction of pending profiles to process (0.0-1.0)"),
-    refresh: bool = typer.Option(False, "--refresh", "-r", help="Force refresh of following list"),
-    max_following: int = typer.Option(100, help="Maximum total profiles to track"),
-    posts_per_user: int = typer.Option(5, help="Number of posts to analyze per user"),
-    include_unverified: bool = typer.Option(False, "--include-unverified", help="Include unverified accounts"),
-    include_orgs: bool = typer.Option(False, "--include-orgs", help="Include organization accounts"),
-    cloud_sync: bool = typer.Option(False, "--cloud-sync", help="Also sync skills to Supermemory cloud")
+    username: Optional[str] = None,
+    handles: Optional[str] = None,
+    batch_size: float = 0.2,
+    refresh: bool = False,
+    max_following: int = 100,
+    posts_per_user: int = 5,
+    include_unverified: bool = False,
+    include_orgs: bool = False,
+    cloud_sync: bool = False,
 ):
     """
     Scrapes the user's network, analyzes profiles, and generates AI skills.
@@ -53,7 +134,7 @@ def build_network_skills(
         username = username or "manual"
     else:
         if username is None:
-            username = typer.prompt("👤 What is the X username to analyze?")
+            username = input("👤 What is the X username to analyze? ").strip()
 
     print(f"🚀 Starting skill extraction for network of @{username}...")
     
@@ -183,32 +264,166 @@ def build_network_skills(
     remaining = len(pending) - len(batch)
     print(f"\n🎉 Batch complete! {remaining} profiles remaining. Run again to continue.")
 
-@app.command()
-def execute_task(task: str):
+@cli.cmd(name="execute-task")
+def execute_task(
+    task: str,
+    skills_dir: str = "skills",
+    model_id: str = "mistral-large-latest",
+    top_k_experts: int = 3,
+    max_skill_agents_per_expert: int = 3,
+    use_rag: bool = False,
+    session_id: Optional[str] = None,
+    new_conversation: bool = False,
+    session_db_path: str = "data/skiller_sessions.db",
+):
     """
     Executes a task using the best available expert skill from the network.
     """
     print(f"🤖 Received task: {task}")
-    print("🔍 Searching for the best expert...")
-    
-    orchestrator = SkillOrchestrator()
-    result = orchestrator.run_task(task)
-    
-    print("\n" + "="*50)
-    print("RESULT")
-    print("="*50)
-    print(result)
-    print("="*50)
+    print("🔍 Searching for the best expert team...")
+
+    result = _run_task_session(
+        task=task,
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_id=session_id,
+        new_conversation=new_conversation,
+        session_db_path=session_db_path,
+    )
+    _print_task_result(result)
 
 
-@app.command()
+session_cli = cli.group("session")
+
+
+@session_cli.cmd(name="start")
+def start_session(
+    task: str,
+    skills_dir: str = "skills",
+    model_id: str = "mistral-large-latest",
+    top_k_experts: int = 3,
+    max_skill_agents_per_expert: int = 3,
+    use_rag: bool = False,
+    session_db_path: str = "data/skiller_sessions.db",
+):
+    """Start a new session with a fresh team roster."""
+    result = _run_task_session(
+        task=task,
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_id=None,
+        new_conversation=True,
+        session_db_path=session_db_path,
+    )
+    _print_task_result(result)
+
+
+@session_cli.cmd(name="continue")
+def continue_session(
+    session_id: str,
+    task: str,
+    skills_dir: str = "skills",
+    model_id: str = "mistral-large-latest",
+    top_k_experts: int = 3,
+    max_skill_agents_per_expert: int = 3,
+    use_rag: bool = False,
+    session_db_path: str = "data/skiller_sessions.db",
+):
+    """Continue an existing session with the same roster."""
+    result = _run_task_session(
+        task=task,
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_id=session_id,
+        new_conversation=False,
+        session_db_path=session_db_path,
+    )
+    _print_task_result(result)
+
+
+@session_cli.cmd(name="new")
+def new_session(
+    task: str,
+    skills_dir: str = "skills",
+    model_id: str = "mistral-large-latest",
+    top_k_experts: int = 3,
+    max_skill_agents_per_expert: int = 3,
+    use_rag: bool = False,
+    session_db_path: str = "data/skiller_sessions.db",
+):
+    """Alias for starting a fresh conversation."""
+    start_session(
+        task=task,
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_db_path=session_db_path,
+    )
+
+
+@session_cli.cmd(name="history")
+def session_history(
+    session_id: str,
+    skills_dir: str = "skills",
+    model_id: str = "mistral-large-latest",
+    top_k_experts: int = 3,
+    max_skill_agents_per_expert: int = 3,
+    use_rag: bool = False,
+    session_db_path: str = "data/skiller_sessions.db",
+):
+    """Print the history for an existing team session."""
+    orchestrator = _build_orchestrator(
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_db_path=session_db_path,
+    )
+    history = orchestrator.get_session_history(session_id)
+    print("\n" + "=" * 50)
+    print("SESSION HISTORY")
+    print("=" * 50)
+    if history is None:
+        print(f"No session found for session_id={session_id}")
+        print("=" * 50)
+        return
+
+    print(f"session_id: {history.session.session_id}")
+    print(f"title: {history.session.title}")
+    print(f"summary: {history.session.summary}")
+    print("personas:")
+    for persona in history.session.personas:
+        focus = f" / {persona.skill_focus}" if persona.skill_focus else ""
+        print(f"- {persona.person_name} (@{persona.x_handle}){focus}")
+    print("turns:")
+    for turn in history.turns:
+        print(f"- turn {turn.turn_id}: {turn.task}")
+        print(f"  answer: {turn.answer}")
+        if turn.session_summary:
+            print(f"  summary: {turn.session_summary}")
+    print("=" * 50)
+
+
+@cli.cmd(name="sync")
 def sync(
-    rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Rebuild the knowledge base from scratch"),
-    username: Optional[str] = typer.Option(None, "--username", "-u", help="X username to fetch fresh followings from (uses ScrapeBadger)"),
-    list_skills: bool = typer.Option(False, "--list", "-l", help="List all indexed skills"),
-    cloud_sync: bool = typer.Option(False, "--cloud-sync", "-c", help="Sync all skills to Supermemory cloud"),
-    from_file: Optional[str] = typer.Option(None, "--from-file", "-f", help="Path to file containing handles (one per line)"),
-    skills_dir: str = typer.Option("skills", help="Directory containing skill files")
+    rebuild: bool = False,
+    username: Optional[str] = None,
+    list_skills: bool = False,
+    cloud_sync: bool = False,
+    from_file: Optional[str] = None,
+    skills_dir: str = "skills",
 ):
     """
     Sync and manage the skill knowledge base.
@@ -344,6 +559,10 @@ def sync(
                 print(f"   ❌ Failed to index {skill_name}: {e}")
         
         print(f"\n✨ Rebuilt knowledge base with {indexed} skills")
+
+        orchestrator = SkillOrchestrator(skills_dir=skills_dir, use_rag=False)
+        refreshed = orchestrator.refresh_skill_index()
+        print(f"   🗂️ Refreshed local skill index with {refreshed} skills")
     
     if cloud_sync:
         print("\n☁️ Syncing to Supermemory cloud...")
@@ -374,4 +593,4 @@ def sync(
 
 
 if __name__ == "__main__":
-    app()
+    main()

@@ -4,8 +4,9 @@ Exposes the Skiller agent and custom API endpoints via FastAPI.
 """
 import glob
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, BackgroundTasks
+from fastapi import HTTPException
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
 from agno.os import AgentOS
@@ -16,6 +17,7 @@ from app.agents.x_scraper import XScraperAgent
 from app.agents.skill_generator import SkillGenerator
 from app.tools.supermemory_tool import SupermemoryToolkit
 from app.knowledge.skill_knowledge import get_skill_knowledge
+from app.models.session import SessionHistoryResponse, SessionPersona
 from app.utils.state import (
     load_network_state,
     save_network_state,
@@ -43,6 +45,14 @@ class BuildNetworkRequest(BaseModel):
 
 class ExecuteTaskRequest(BaseModel):
     task: str
+    skills_dir: str = "skills"
+    model_id: str = "mistral-large-latest"
+    top_k_experts: int = 3
+    max_skill_agents_per_expert: int = 3
+    use_rag: bool = False
+    session_id: Optional[str] = None
+    new_conversation: bool = False
+    session_db_path: str = "data/skiller_sessions.db"
 
 class SyncRequest(BaseModel):
     rebuild: bool = False
@@ -64,6 +74,11 @@ class BuildResponse(BaseModel):
 
 class TaskResponse(BaseModel):
     result: str
+    session_id: Optional[str] = None
+    turn_id: Optional[int] = None
+    created_new_session: bool = False
+    summary: Optional[str] = None
+    personas: List[SessionPersona] = Field(default_factory=list)
 
 class SyncResponse(BaseModel):
     status: str
@@ -75,6 +90,17 @@ class SyncResponse(BaseModel):
 # =============================================================================
 
 router = APIRouter(prefix="/api", tags=["Skiller API"])
+
+
+def _build_orchestrator(request: ExecuteTaskRequest) -> SkillOrchestrator:
+    return SkillOrchestrator(
+        model_id=request.model_id,
+        skills_dir=request.skills_dir,
+        use_rag=request.use_rag,
+        top_k_experts=request.top_k_experts,
+        max_skill_agents_per_expert=request.max_skill_agents_per_expert,
+        session_db_path=request.session_db_path,
+    )
 
 @router.get("/status", response_model=StatusResponse)
 async def get_status():
@@ -91,9 +117,43 @@ async def get_status():
 @router.post("/execute-task", response_model=TaskResponse)
 async def execute_task(request: ExecuteTaskRequest):
     """Execute a task using the best available expert skill."""
-    orchestrator = SkillOrchestrator()
+    orchestrator = _build_orchestrator(request)
+    if hasattr(orchestrator, "run_session_task"):
+        result = orchestrator.run_session_task(
+            request.task,
+            session_id=request.session_id,
+            new_conversation=request.new_conversation,
+        )
+        return TaskResponse(
+            result=result.answer,
+            session_id=result.session_id,
+            turn_id=result.turn_id,
+            created_new_session=result.created_new_session,
+            summary=result.summary,
+            personas=result.personas,
+        )
+
     result = orchestrator.run_task(request.task)
     return TaskResponse(result=result)
+
+
+@router.get("/sessions/{session_id}/history", response_model=SessionHistoryResponse)
+async def get_session_history(session_id: str, skills_dir: str = "skills", model_id: str = "mistral-large-latest", top_k_experts: int = 3, max_skill_agents_per_expert: int = 3, use_rag: bool = False, session_db_path: str = "data/skiller_sessions.db"):
+    """Return the stored history for a team session."""
+    request = ExecuteTaskRequest(
+        task="",
+        skills_dir=skills_dir,
+        model_id=model_id,
+        top_k_experts=top_k_experts,
+        max_skill_agents_per_expert=max_skill_agents_per_expert,
+        use_rag=use_rag,
+        session_db_path=session_db_path,
+    )
+    orchestrator = _build_orchestrator(request)
+    history = orchestrator.get_session_history(session_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    return history
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync_skills(request: SyncRequest):
@@ -120,6 +180,10 @@ async def sync_skills(request: SyncRequest):
             except Exception:
                 pass
         messages.append(f"Rebuilt knowledge base with {indexed} skills")
+
+        orchestrator = SkillOrchestrator(skills_dir=request.skills_dir, use_rag=False)
+        refreshed = orchestrator.refresh_skill_index()
+        messages.append(f"Refreshed local skill index with {refreshed} skills")
     
     if request.cloud_sync:
         try:
