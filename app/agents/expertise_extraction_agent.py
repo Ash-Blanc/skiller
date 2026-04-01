@@ -12,7 +12,7 @@ from datetime import datetime
 import re
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from app.utils.llm import get_llm_model
 from agno.workflow import Step
 import langwatch
 
@@ -51,7 +51,7 @@ class ExpertiseExtractionAgent:
         self.agent = Agent(
             name="Expertise Extraction Agent",
             instructions=self.expertise_prompt.prompt if hasattr(self.expertise_prompt, 'prompt') else self.expertise_prompt,
-            model=OpenAIChat(id="gpt-4o"),
+            model=get_llm_model("gpt-4o"),
             output_schema=ExpertiseAnalysis
         )
         

@@ -2,6 +2,8 @@
 Skiller CLI entrypoint.
 """
 
+import utils.transport
+import utils.session
 import os
 import sys
 from typing import Optional
@@ -50,7 +52,7 @@ def main() -> None:
 def _build_orchestrator(
     *,
     skills_dir: str,
-    model_id: str,
+    model_id: Optional[str],
     top_k_experts: int,
     max_skill_agents_per_expert: int,
     use_rag: bool,
@@ -70,7 +72,7 @@ def _run_task_session(
     *,
     task: str,
     skills_dir: str,
-    model_id: str,
+    model_id: Optional[str],
     top_k_experts: int,
     max_skill_agents_per_expert: int,
     use_rag: bool,
@@ -268,7 +270,7 @@ def build_network_skills(
 def execute_task(
     task: str,
     skills_dir: str = "skills",
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     top_k_experts: int = 3,
     max_skill_agents_per_expert: int = 3,
     use_rag: bool = False,
@@ -303,7 +305,7 @@ session_cli = cli.group("session")
 def start_session(
     task: str,
     skills_dir: str = "skills",
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     top_k_experts: int = 3,
     max_skill_agents_per_expert: int = 3,
     use_rag: bool = False,
@@ -329,7 +331,7 @@ def continue_session(
     session_id: str,
     task: str,
     skills_dir: str = "skills",
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     top_k_experts: int = 3,
     max_skill_agents_per_expert: int = 3,
     use_rag: bool = False,
@@ -354,7 +356,7 @@ def continue_session(
 def new_session(
     task: str,
     skills_dir: str = "skills",
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     top_k_experts: int = 3,
     max_skill_agents_per_expert: int = 3,
     use_rag: bool = False,
@@ -376,7 +378,7 @@ def new_session(
 def session_history(
     session_id: str,
     skills_dir: str = "skills",
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     top_k_experts: int = 3,
     max_skill_agents_per_expert: int = 3,
     use_rag: bool = False,

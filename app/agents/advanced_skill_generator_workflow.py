@@ -26,7 +26,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
 from agno.agent import Agent
-from agno.models.mistral import MistralChat
+from app.utils.llm import get_llm_model
 from agno.workflow import Workflow, Step, Parallel, Condition, Loop
 from agno.workflow.types import StepInput, StepOutput
 
@@ -76,12 +76,12 @@ class AdvancedSkillGeneratorWorkflow:
     - AC4.3: Provides meaningful responses for insufficient data cases
     """
     
-    def __init__(self, model_id: str = "mistral-large-latest"):
+    def __init__(self, model_id: Optional[str] = None):
         """
         Initialize the Advanced Skill Generator Workflow.
         
         Args:
-            model_id: The model to use for AI agents (default: mistral-large-latest)
+            model_id: The model to use for AI agents (default: None, uses get_llm_model default)
         """
         self.model_id = model_id
         
@@ -110,14 +110,14 @@ class AdvancedSkillGeneratorWorkflow:
 
     def _build_agent_model(self):
         """Build an Agno-compatible model while keeping mocked tests stable."""
-        model = MistralChat(id=self.model_id)
+        model = get_llm_model(self.model_id)
 
-        # When MistralChat is patched in tests, it may return a Mock rather than
+        # When model is patched in tests, it may return a Mock rather than
         # a real Agno model. Fall back to the raw model id string in that case.
-        if model.__class__.__module__.startswith("agno."):
+        if hasattr(model, "__class__") and hasattr(model.__class__, "__module__") and model.__class__.__module__.startswith("agno."):
             return model
 
-        return f"mistral:{self.model_id}"
+        return f"llm:{self.model_id}"
     
     def _initialize_agents(self):
         """Initialize all agents used in the workflow with LangWatch prompts and Mistral AI."""
@@ -1750,23 +1750,16 @@ Key characteristics:
         }
 
 
-# Enhanced factory function for easy instantiation with Mistral AI
-def create_advanced_skill_generator_workflow(model_id: str = "mistral-large-latest") -> AdvancedSkillGeneratorWorkflow:
+# Enhanced factory function for easy instantiation with LLM provider
+def create_advanced_skill_generator_workflow(model_id: Optional[str] = None) -> AdvancedSkillGeneratorWorkflow:
     """
-    Enhanced factory function to create an AdvancedSkillGeneratorWorkflow instance with Mistral AI.
+    Enhanced factory function to create an AdvancedSkillGeneratorWorkflow instance.
     
     Args:
-        model_id: The model to use for AI agents (default: mistral-large-latest)
+        model_id: The model to use for AI agents (default: None, uses get_llm_model default)
         
     Returns:
         Configured AdvancedSkillGeneratorWorkflow instance with enhanced error handling
-        
-    Features:
-        - Mistral AI integration for improved performance
-        - Comprehensive error handling with exponential backoff (AC4.1)
-        - Private/suspended account management (AC4.2)
-        - Meaningful responses for insufficient data (AC4.3)
-        - Enhanced validation and monitoring capabilities
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -1776,8 +1769,8 @@ def create_advanced_skill_generator_workflow(model_id: str = "mistral-large-late
         
         logger.info(
             f"Advanced Skill Generator Workflow created successfully. "
-            f"Model: {model_id}, "
-            f"Enhanced features: Mistral AI, comprehensive validation, exponential backoff"
+            f"Model: {model_id or 'default'}, "
+            f"Enhanced features: Comprehensive validation, exponential backoff"
         )
         
         return workflow

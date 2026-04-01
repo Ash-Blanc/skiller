@@ -10,7 +10,7 @@ import re
 import yaml
 from agno.agent import Agent
 from agno.db.sqlite import SqliteDb
-from agno.models.mistral import MistralChat
+from app.utils.llm import get_llm_model
 
 from app.models.skill import SkillProfile
 from app.models.session import (
@@ -106,7 +106,7 @@ class SkillOrchestrator:
 
         # Reused fallback agent for empty skill directories or synthesis failures.
         self.selector_agent = Agent(
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions=self._build_instructions(),
             tools=[self.web_search],
             markdown=True,
@@ -174,7 +174,7 @@ class SkillOrchestrator:
         output_schema: Optional[type] = None,
     ) -> Agent:
         kwargs = {
-            "model": MistralChat(id=self.model_id),
+            "model": get_llm_model(self.model_id),
             "instructions": instructions,
             "tools": [self.web_search],
             "markdown": True,

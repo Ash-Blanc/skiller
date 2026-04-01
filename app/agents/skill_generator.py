@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from agno.agent import Agent
-from agno.models.mistral import MistralChat
+from app.utils.llm import get_llm_model
 from app.models.skill import SkillProfile
 from app.knowledge.skill_knowledge import get_shared_skill_knowledge
 from app.utils.skill_index import upsert_skill_index_entry
@@ -9,12 +9,12 @@ import re
 from app.utils.prompts import get_prompt_text
 
 class SkillGenerator:
-    def __init__(self, model_id: str = "mistral-large-latest"):
+    def __init__(self, model_id: Optional[str] = None):
         self.model_id = model_id
         self.prompt_text = get_prompt_text("x_post_analyzer")
         
         self.agent = Agent(
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions=self.prompt_text,
             output_schema=SkillProfile,
             markdown=True

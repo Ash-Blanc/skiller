@@ -15,7 +15,7 @@ import time
 from agno.workflow import Workflow, Step
 from agno.workflow.parallel import Parallel
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from app.utils.llm import get_llm_model
 
 from ..models.collected_data import CollectedData, TwitterAPIData, ScrapeBadgerData
 from ..agents.twitter_api_collector import TwitterAPICollector
@@ -49,13 +49,13 @@ class ParallelDataCollectionWorkflow:
         self.twitter_agent = Agent(
             name="TwitterAPI Collector",
             instructions="Collect comprehensive Twitter profile data using TwitterAPI.io",
-            model=OpenAIChat(id="gpt-4o")
+            model=get_llm_model("gpt-4o")
         )
         
         self.scrapebadger_agent = Agent(
             name="ScrapeBadger Collector", 
             instructions="Collect enriched Twitter profile data using ScrapeBadger",
-            model=OpenAIChat(id="gpt-4o")
+            model=get_llm_model("gpt-4o")
         )
         
         # Create workflow steps

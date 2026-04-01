@@ -12,7 +12,7 @@ from datetime import datetime
 import yaml
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from app.utils.llm import get_llm_model
 
 from ..models.collected_data import ScrapeBadgerData
 from ..utils.workflow_metrics import get_workflow_monitor
@@ -33,7 +33,7 @@ class ScrapeBadgerCollector:
         
         # Initialize agent
         self.agent = Agent(
-            model=OpenAIChat(id="gpt-4o"),
+            model=get_llm_model("gpt-4o"),
             instructions=self.prompt_config["messages"][0]["content"],
             tools=[],  # ScrapeBadger tools would be added here
             markdown=True,

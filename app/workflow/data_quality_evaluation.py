@@ -13,7 +13,7 @@ from enum import Enum
 
 from agno.workflow import Workflow, Step, Loop, Condition
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from app.utils.llm import get_llm_model
 
 from ..models.collected_data import CollectedData, TwitterAPIData, ScrapeBadgerData
 from ..utils.workflow_metrics import get_workflow_monitor
@@ -609,7 +609,7 @@ class QualityEvaluationLoop:
             
             Focus on completeness, accuracy, relevance, and timeliness of the data.
             """,
-            model=OpenAIChat(id="gpt-4o")
+            model=get_llm_model("gpt-4o")
         )
         
         # Create improvement agent
@@ -624,7 +624,7 @@ class QualityEvaluationLoop:
             
             Provide actionable recommendations for enhancing data quality.
             """,
-            model=OpenAIChat(id="gpt-4o")
+            model=get_llm_model("gpt-4o")
         )
     
     def create_quality_evaluation_workflow(self, username: str) -> Workflow:

@@ -1,6 +1,6 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from agno.agent import Agent
-from agno.models.mistral import MistralChat
+from app.utils.llm import get_llm_model
 from app.tools.scraper_tools import UnifiedScraperToolkit
 from app.tools.twitterapiio_tool import TwitterAPIIOToolkit, get_twitterapiio_toolkit
 from app.tools.scrapebadger_tool import ScrapeBadgerToolkit, get_scrapebadger_toolkit
@@ -34,7 +34,7 @@ ORG_SIGNALS = [
 
 
 class XScraperAgent:
-    def __init__(self, model_id: str = "mistral-large-latest"):
+    def __init__(self, model_id: Optional[str] = None):
         self.model_id = model_id
         self.prompt_text = get_prompt_text("x_following_finder")
         
@@ -49,7 +49,7 @@ class XScraperAgent:
         
         # Agent for fallback scraping method (LLM + Tools)
         self.scraper_agent = Agent(
-            model=MistralChat(id=model_id),
+            model=get_llm_model(self.model_id),
             tools=[self.scraper],
             instructions=self.prompt_text,
             markdown=True
@@ -57,7 +57,7 @@ class XScraperAgent:
         
         # Classifier agent for human/org detection
         self.classifier = Agent(
-            model=MistralChat(id=model_id),
+            model=get_llm_model(self.model_id),
             instructions="""You are a classifier that determines if an X (Twitter) profile belongs to a HUMAN or an ORGANIZATION.
 
 HUMAN profiles typically have:

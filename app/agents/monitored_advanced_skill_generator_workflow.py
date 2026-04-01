@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
 from agno.agent import Agent
-from agno.models.mistral import MistralChat
+from app.utils.llm import get_llm_model
 from agno.workflow import Workflow, Step, Parallel, Condition, Loop
 from agno.workflow.types import StepInput, StepOutput
 
@@ -65,12 +65,12 @@ class MonitoredAdvancedSkillGeneratorWorkflow:
     - TR3: System uptime should be 99.5% or higher, comprehensive error logging and monitoring
     """
     
-    def __init__(self, model_id: str = "mistral-large-latest", monitor: Optional[WorkflowMonitor] = None):
+    def __init__(self, model_id: Optional[str] = None, monitor: Optional[WorkflowMonitor] = None):
         """
         Initialize the Monitored Advanced Skill Generator Workflow.
         
         Args:
-            model_id: The Mistral model to use for AI agents
+            model_id: The model to use for AI agents (default: None, uses get_llm_model default)
             monitor: Optional WorkflowMonitor instance (creates new if None)
         """
         self.model_id = model_id
@@ -120,7 +120,7 @@ class MonitoredAdvancedSkillGeneratorWorkflow:
         # Data collection agents with enhanced error handling
         self.twitter_api_agent = Agent(
             name="TwitterAPI Data Collector",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             tools=[self.twitter_api_toolkit],
             instructions="""You are a data collection specialist using TwitterAPI.io to gather comprehensive profile information.
 
@@ -146,7 +146,7 @@ Return structured data with clear success indicators and detailed error informat
         
         self.scrapebadger_agent = Agent(
             name="ScrapeBadger Data Collector",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             tools=[self.scrapebadger_toolkit],
             instructions="""You are a data enrichment specialist using ScrapeBadger to gather premium profile insights.
 
@@ -174,7 +174,7 @@ Return enriched data with quality indicators and detailed error information when
         # Analysis agents with Mistral AI
         self.expertise_agent = Agent(
             name="Expertise Analyzer",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions="""You are an expert at identifying and extracting professional expertise from social media profiles.
 
 Analyze the provided profile data to extract:
@@ -206,7 +206,7 @@ Provide confidence scores (0-1) for each extracted expertise area.""",
         
         self.communication_agent = Agent(
             name="Communication Analyzer",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions="""You are a communication style analyst specializing in social media writing patterns.
 
 Analyze the provided content to determine:
@@ -232,7 +232,7 @@ Provide a comprehensive communication style description that would help an AI ag
         
         self.insight_agent = Agent(
             name="Insight Generator",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions="""You are an insight analyst specializing in extracting unique perspectives and value propositions.
 
 From the provided profile data, identify:
@@ -260,7 +260,7 @@ Focus on content that demonstrates original thinking and provides unique value t
         # Profile generation agent with Mistral AI
         self.profile_generator_agent = Agent(
             name="Profile Generator",
-            model=MistralChat(id=self.model_id),
+            model=get_llm_model(self.model_id),
             instructions="""You are a skill profile generator that creates comprehensive AI agent instructions.
 
 Using the provided analysis, create:
@@ -923,14 +923,14 @@ Create instructions that would allow an AI agent to be genuinely helpful using t
 
 # Enhanced factory function with monitoring integration
 def create_monitored_advanced_skill_generator_workflow(
-    model_id: str = "mistral-large-latest",
+    model_id: Optional[str] = None,
     monitor: Optional[WorkflowMonitor] = None
 ) -> MonitoredAdvancedSkillGeneratorWorkflow:
     """
     Enhanced factory function to create a MonitoredAdvancedSkillGeneratorWorkflow.
     
     Args:
-        model_id: The Mistral model to use for AI agents
+        model_id: The model to use for AI agents (default: None, uses get_llm_model default)
         monitor: Optional WorkflowMonitor instance
         
     Returns:
