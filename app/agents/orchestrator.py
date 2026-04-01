@@ -98,6 +98,11 @@ class SkillOrchestrator:
         self.web_search = WebSearchToolkit()
         self.session_store = TeamSessionStore(db_path=self.session_db_path)
         self.session_db = SqliteDb(db_file=self.session_db_path)
+        # Pre-initialize tables to avoid race conditions during parallel execution
+        try:
+            self.session_db._create_all_tables()
+        except Exception:
+            pass
 
         # Reused fallback agent for empty skill directories or synthesis failures.
         self.selector_agent = Agent(
