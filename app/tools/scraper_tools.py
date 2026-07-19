@@ -1,8 +1,10 @@
 """
 Unified Scraper Toolkit with cascading fallback strategy.
 
-Fallback chain: TwitterAPI.io (primary for X) → Apify → ScrapeGraph → BrightData → Firecrawl → WebsiteTools
+Fallback chain: TwitterAPI.io (primary for X) → Xquik → Apify → ScrapeGraph → BrightData → Firecrawl → WebsiteTools
 """
+from __future__ import annotations
+
 import os
 from typing import Optional
 from agno.tools import Toolkit
@@ -40,6 +42,13 @@ try:
 except ImportError:
     pass
 
+XQUIK_AVAILABLE = False
+try:
+    from app.tools.xquik_tool import XquikToolkit
+    XQUIK_AVAILABLE = True
+except ImportError:
+    pass
+
 
 class UnifiedScraperToolkit(Toolkit):
     """
@@ -47,10 +56,11 @@ class UnifiedScraperToolkit(Toolkit):
     
     Fallback chain for X content:
     1. TwitterAPI.io (best - dedicated X API, no auth required)
-    2. Apify (pre-built actors)
-    3. ScrapeGraph (AI-powered extraction with JS rendering)
-    4. BrightData web_data_feed
-    5. Firecrawl / WebsiteTools (last resort)
+    2. Xquik (API-key X data fallback)
+    3. Apify (pre-built actors)
+    4. ScrapeGraph (AI-powered extraction with JS rendering)
+    5. BrightData web_data_feed
+    6. Firecrawl / WebsiteTools (last resort)
     """
     
     def __init__(
@@ -60,11 +70,13 @@ class UnifiedScraperToolkit(Toolkit):
         apify_api_token: Optional[str] = None,
         scrapegraph_api_key: Optional[str] = None,
         twitterapiio_key: Optional[str] = None,
+        xquik_api_key: Optional[str] = None,
     ):
         super().__init__(name="unified_scraper")
         
         # Initialize scrapers that are available
         self.twitterapiio: Optional[TwitterAPIIOToolkit] = None
+        self.xquik: Optional[XquikToolkit] = None
         self.apify: Optional[ApifyXToolkit] = None
         self.scrapegraph: Optional[ScrapeGraphTools] = None
         self.brightdata: Optional[BrightDataTools] = None
@@ -83,6 +95,19 @@ class UnifiedScraperToolkit(Toolkit):
                         self.twitterapiio = None
                 except Exception as e:
                     logger.warning(f"Failed to initialize TwitterAPI.io: {e}")
+
+        # Xquik (Secondary for X content)
+        if XQUIK_AVAILABLE:
+            xquik_key = xquik_api_key or os.getenv("XQUIK_API_KEY")
+            if xquik_key:
+                try:
+                    self.xquik = XquikToolkit(api_key=xquik_key)
+                    if self.xquik.is_available():
+                        logger.info("✅ Xquik initialized as secondary X scraper")
+                    else:
+                        self.xquik = None
+                except Exception as e:
+                    logger.warning(f"Failed to initialize Xquik: {e}")
         
         # Apify (Secondary for X content)
         if APIFY_AVAILABLE:
@@ -186,7 +211,7 @@ class UnifiedScraperToolkit(Toolkit):
         """
         Scrape X/Twitter posts using cascading fallback.
         
-        Fallback chain: TwitterAPI.io → Apify → ScrapeGraph → BrightData → general scraping
+        Fallback chain: TwitterAPI.io → Xquik → Apify → ScrapeGraph → BrightData → general scraping
         
         Args:
             username: X handle (without @)
@@ -205,11 +230,22 @@ class UnifiedScraperToolkit(Toolkit):
                 result = self.twitterapiio.get_user_tweets(username, max_tweets=max_tweets)
                 if result and "Error" not in result and len(result) > 50:
                     return result
-                logger.info(f"TwitterAPI.io insufficient result, trying Apify...")
+                logger.info("TwitterAPI.io insufficient result, trying Xquik...")
             except Exception as e:
                 logger.warning(f"TwitterAPI.io failed: {e}")
-        
-        # Method 2: Apify (pre-built actors)
+
+        # Method 2: Xquik
+        if self.xquik and self.xquik.is_available():
+            try:
+                logger.info(f"Trying Xquik for @{username} posts...")
+                result = self.xquik.get_user_tweets(username, max_tweets=max_tweets)
+                if result and "Error" not in result and len(result) > 50:
+                    return result
+                logger.info("Xquik insufficient result, trying Apify...")
+            except Exception as e:
+                logger.warning(f"Xquik failed: {e}")
+
+        # Method 3: Apify (pre-built actors)
         if self.apify and self.apify.is_available():
             try:
                 logger.info(f"Trying Apify for @{username} posts...")
@@ -220,7 +256,7 @@ class UnifiedScraperToolkit(Toolkit):
             except Exception as e:
                 logger.warning(f"Apify failed: {e}")
         
-        # Method 3: ScrapeGraph (AI-powered with JS rendering)
+        # Method 4: ScrapeGraph (AI-powered with JS rendering)
         if self.scrapegraph:
             try:
                 logger.info(f"Trying ScrapeGraph for @{username} posts...")
@@ -234,7 +270,7 @@ class UnifiedScraperToolkit(Toolkit):
             except Exception as e:
                 logger.warning(f"ScrapeGraph failed: {e}")
         
-        # Method 4: BrightData web_data_feed
+        # Method 5: BrightData web_data_feed
         if self.brightdata:
             try:
                 logger.info(f"Trying BrightData for @{username} posts...")
@@ -255,7 +291,7 @@ class UnifiedScraperToolkit(Toolkit):
         """
         Scrape an X/Twitter profile page.
         
-        Fallback chain: TwitterAPI.io → Apify → ScrapeGraph → BrightData → general scraping
+        Fallback chain: TwitterAPI.io → Xquik → Apify → ScrapeGraph → BrightData → general scraping
         
         Args:
             username: X handle (without @)
@@ -273,11 +309,22 @@ class UnifiedScraperToolkit(Toolkit):
                 result = self.twitterapiio.get_user_info(username)
                 if result and "Error" not in result:
                     return result
-                logger.info(f"TwitterAPI.io profile insufficient, trying Apify...")
+                logger.info("TwitterAPI.io profile insufficient, trying Xquik...")
             except Exception as e:
                 logger.warning(f"TwitterAPI.io profile failed: {e}")
-        
-        # Method 2: Apify
+
+        # Method 2: Xquik
+        if self.xquik and self.xquik.is_available():
+            try:
+                logger.info(f"Trying Xquik for @{username} profile...")
+                result = self.xquik.get_user_info(username)
+                if result and "Error" not in result:
+                    return result
+                logger.info("Xquik profile insufficient, trying Apify...")
+            except Exception as e:
+                logger.warning(f"Xquik profile failed: {e}")
+
+        # Method 3: Apify
         if self.apify and self.apify.is_available():
             try:
                 logger.info(f"Trying Apify for @{username} profile...")
@@ -288,7 +335,7 @@ class UnifiedScraperToolkit(Toolkit):
             except Exception as e:
                 logger.warning(f"Apify profile failed: {e}")
         
-        # Method 3: ScrapeGraph
+        # Method 4: ScrapeGraph
         if self.scrapegraph:
             try:
                 logger.info(f"Trying ScrapeGraph for @{username} profile...")
@@ -302,7 +349,7 @@ class UnifiedScraperToolkit(Toolkit):
             except Exception as e:
                 logger.warning(f"ScrapeGraph profile failed: {e}")
         
-        # Method 4: BrightData
+        # Method 5: BrightData
         if self.brightdata:
             try:
                 logger.info(f"Trying BrightData for @{username} profile...")

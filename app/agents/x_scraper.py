@@ -4,6 +4,7 @@ from app.utils.llm import get_llm_model
 from app.tools.scraper_tools import UnifiedScraperToolkit
 from app.tools.twitterapiio_tool import TwitterAPIIOToolkit, get_twitterapiio_toolkit
 from app.tools.scrapebadger_tool import ScrapeBadgerToolkit, get_scrapebadger_toolkit
+from app.tools.xquik_tool import get_xquik_toolkit
 import json
 import re
 from app.utils.prompts import get_prompt_text
@@ -43,6 +44,9 @@ class XScraperAgent:
         
         # Initialize TwitterAPI.io toolkit (Secondary)
         self.twitterapiio = get_twitterapiio_toolkit()
+
+        # Initialize Xquik toolkit (Additional API fallback)
+        self.xquik = get_xquik_toolkit()
         
         # Initialize unified scraper toolkit (fallback)
         self.scraper = UnifiedScraperToolkit()
@@ -121,6 +125,7 @@ Respond with ONLY one word: HUMAN or ORG""",
         Fallback chain:
         1. ScrapeBadger (Primary - most reliable)
         2. TwitterAPI.io (Secondary)
+        3. Xquik (API-key fallback)
         
         Note: No LLM fallback - that causes hallucination.
         """
@@ -160,8 +165,23 @@ Respond with ONLY one word: HUMAN or ORG""",
                 except Exception as e:
                     print(f"   ⚠️ Method 2 failed: {e}")
         
+        # Method 3: Xquik (Additional API fallback)
+        if not profiles:
+            if self.xquik and self.xquik.is_available():
+                print("   🔄 Attempting Method 3: Xquik...")
+                try:
+                    profiles = self.xquik.get_user_followings(
+                        username,
+                        max_users=200,
+                        verified_only=verified_only
+                    )
+                    if profiles:
+                        print(f"   ✅ Method 3 succeeded, found {len(profiles)} handles.")
+                except Exception as e:
+                    print(f"   ⚠️ Method 3 failed: {e}")
+
         # No LLM fallback - it causes hallucination!
-        # If both methods fail, return empty list
+        # If all API methods fail, return empty list
 
         if not profiles:
             print(f"   ❌ All methods failed. No followings retrieved.")
@@ -193,7 +213,7 @@ Respond with ONLY one word: HUMAN or ORG""",
         """
         Gets recent posts for a specific handle.
         
-        Fallback chain: TwitterAPI.io → UnifiedScraperToolkit
+        Fallback chain: ScrapeBadger → TwitterAPI.io → Xquik → UnifiedScraperToolkit
         """
         handle = handle.replace("@", "").strip()
         
@@ -218,8 +238,19 @@ Respond with ONLY one word: HUMAN or ORG""",
                 print(f"   ⚠️ TwitterAPI.io insufficient, trying fallback...")
             except Exception as e:
                 print(f"   ⚠️ TwitterAPI.io failed: {e}")
+
+        # Method 3: Xquik
+        if self.xquik and self.xquik.is_available():
+            print("   🔄 Getting posts via Xquik...")
+            try:
+                result = self.xquik.get_user_tweets(handle, max_tweets=count)
+                if result and "Error" not in result and len(result) > 50:
+                    return result
+                print("   ⚠️ Xquik insufficient, trying fallback...")
+            except Exception as e:
+                print(f"   ⚠️ Xquik failed: {e}")
         
-        # Method 3: UnifiedScraperToolkit
+        # Method 4: UnifiedScraperToolkit
         print(f"   🔄 Getting posts via UnifiedScraperToolkit...")
         result = self.scraper.scrape_x_posts(handle, max_tweets=count)
         
