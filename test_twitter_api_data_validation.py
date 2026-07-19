@@ -12,7 +12,7 @@ from app.models.collected_data import TwitterAPIData, create_twitter_api_data_fr
 from datetime import datetime
 
 
-def test_basic_functionality():
+def validate_basic_functionality():
     """Test basic TwitterAPIData functionality."""
     print("Testing basic TwitterAPIData functionality...")
     
@@ -74,7 +74,7 @@ def test_basic_functionality():
     return data
 
 
-def test_enhanced_properties(data):
+def validate_enhanced_properties(data):
     """Test enhanced properties for AC1.2 and AC1.3 validation."""
     print("\nTesting enhanced properties...")
     
@@ -110,7 +110,7 @@ def test_enhanced_properties(data):
     print("✅ High engagement tweet filtering works")
 
 
-def test_requirements_validation(data):
+def validate_requirements(data):
     """Test AC1.2 and AC1.3 requirements validation."""
     print("\nTesting requirements validation...")
     
@@ -135,7 +135,7 @@ def test_requirements_validation(data):
     print("✅ Overall collection validation works")
 
 
-def test_factory_function():
+def validate_factory_function():
     """Test the factory function for creating TwitterAPIData from responses."""
     print("\nTesting factory function...")
     
@@ -172,11 +172,11 @@ def test_factory_function():
     print("✅ Error handling works correctly")
 
 
-def test_profile_summary():
+def validate_profile_summary():
     """Test profile summary generation."""
     print("\nTesting profile summary...")
     
-    data = test_basic_functionality()
+    data = validate_basic_functionality()
     summary = data.get_profile_summary()
     
     assert summary['username'] == 'testuser'
@@ -194,19 +194,19 @@ def main():
     
     try:
         # Test basic functionality
-        data = test_basic_functionality()
+        data = validate_basic_functionality()
         
         # Test enhanced properties
-        test_enhanced_properties(data)
+        validate_enhanced_properties(data)
         
         # Test requirements validation
-        test_requirements_validation(data)
+        validate_requirements(data)
         
         # Test factory function
-        test_factory_function()
+        validate_factory_function()
         
         # Test profile summary
-        test_profile_summary()
+        validate_profile_summary()
         
         print("\n🎉 All tests passed! TwitterAPIData enhancements are working correctly.")
         print("\n✅ Requirements validated:")

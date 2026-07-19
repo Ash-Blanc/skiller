@@ -29,8 +29,11 @@ Before you begin, ensure you have the following API keys:
 - **LangWatch API Key**: For prompt management and monitoring.
 - **ScrapeBadger API Key**: Primary tool for scraping X followings and posts (highly recommended).
 - **(Optional) TwitterAPI.io API Key**: Secondary fallback for follower/following data.
+- **(Optional) Xquik API Key**: Additional fallback for X profiles, posts, and following lists.
 - **(Optional) Firecrawl API Key**: Additional scraping support.
 - **(Optional) Supermemory API Key**: For cloud sync of skills.
+
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.
 
 > **Note**: ScrapeBadger is the preferred scraping method due to its reliability and resistance to bot detection.
 
@@ -80,6 +83,7 @@ Skiller is built to be installed effortlessly using `uv`.
    # You can provide multiple keys separated by commas for load balancing
    SCRAPEBADGER_API_KEY=key1,key2
    TWITTERAPIIO_API_KEY=key1,key2
+   XQUIK_API_KEY=key1
    FIRECRAWL_API_KEY=key1
    
    # Optional Cloud Memory
